@@ -1,0 +1,136 @@
+{
+  "projectType": "saas",
+  "projectName": "SMyEG",
+  "projectDescription": "Sistema de Monitoreo y Evaluación Geoespacial - A full-stack geospatial monitoring and evaluation platform for forest patrimony management",
+  "theme": "palm",
+  "primaryColor": "#10b981",
+  "lightColor": "#34d399",
+  "darkColor": "#059669",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/authentication",
+              "features/organizations",
+              "features/roles-permissions",
+              "features/dashboard",
+              "features/geospatial-data"
+            ]
+          },
+          {
+            "group": "Modules",
+            "pages": [
+              "modules/forest-patrimony",
+              "modules/biological-assets",
+              "modules/land-accounting",
+              "modules/audit-system"
+            ]
+          },
+          {
+            "group": "Geospatial Features",
+            "pages": [
+              "geo/shapefile-import",
+              "geo/map-visualization",
+              "geo/data-hierarchy",
+              "geo/workers"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/environment-variables",
+              "deployment/database-setup",
+              "deployment/docker",
+              "deployment/pm2-windows"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth/login",
+              "api/auth/register",
+              "api/auth/sessions"
+            ]
+          },
+          {
+            "group": "Organizations",
+            "pages": [
+              "api/organizations/overview",
+              "api/organizations/management"
+            ]
+          },
+          {
+            "group": "Users & Roles",
+            "pages": [
+              "api/users/overview",
+              "api/roles/overview"
+            ]
+          },
+          {
+            "group": "Forest Management",
+            "pages": [
+              "api/forest/patrimony",
+              "api/forest/biological-assets",
+              "api/forest/geo-import",
+              "api/forest/land-accounting"
+            ]
+          },
+          {
+            "group": "Assets & Measurements",
+            "pages": [
+              "api/assets/campaigns",
+              "api/assets/observations",
+              "api/assets/calculations"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-organization support with role-based access control",
+    "Geospatial data management with Leaflet map visualization",
+    "Shapefile import and validation with background workers",
+    "Forest patrimony management across hierarchical levels",
+    "Biological asset tracking and measurement campaigns",
+    "Land accounting and forest area calculations",
+    "Comprehensive audit logging system",
+    "NextAuth v5 authentication with credential provider"
+  ],
+  "publicApiSurface": [
+    "POST /api/auth/signin - User authentication",
+    "POST /api/auth/signup - User registration",
+    "GET /api/organizations - List organizations",
+    "POST /api/organizations - Create organization",
+    "GET /api/users - List users",
+    "POST /api/users - Create user",
+    "GET /api/roles - List roles",
+    "POST /api/roles - Create role",
+    "GET /api/forest/patrimony - Get forest patrimony data",
+    "POST /api/forest/geo/import - Import shapefile",
+    "GET /api/forest/geo/layers - Get geospatial layers",
+    "GET /api/forest/biological-assets - List biological assets",
+    "POST /api/assets/measurement-campaigns - Create measurement campaign",
+    "GET /api/assets/measurement-observations - Get observations",
+    "POST /api/assets/calculation-jobs - Create calculation job",
+    "GET /api/audit - Get audit logs",
+    "GET /api/dashboard - Get dashboard metrics"
+  ]
+}
