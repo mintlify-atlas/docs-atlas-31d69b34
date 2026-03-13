@@ -1,0 +1,454 @@
+---
+title: 'Map Visualization'
+description: 'Interactive map component for visualizing and managing geospatial data'
+---
+
+## Overview
+
+The `GeoDashboardMap` component provides a full-featured interactive map interface built with Leaflet and React-Leaflet. It supports:
+
+- Multiple basemap providers (OpenStreetMap, Google Satellite, Topographic, etc.)
+- Layer management with opacity and color controls
+- Search and hierarchical filtering
+- Polygon selection and multi-select
+- Drawing tools (distance, area, polygon creation)
+- Feature styling by surface area
+- Export and coordinate capture
+
+## Component Architecture
+
+### Client-Side Rendering
+
+The map is rendered **client-side only** to avoid SSR issues with Leaflet:
+
+```tsx
+import dynamic from "next/dynamic";
+
+const GeoDashboardMap = dynamic(
+  () => import("@/components/GeoDashboardMap").then((m) => m.GeoDashboardMap),
+  { ssr: false }
+);
+
+export function GeoDashboardMapClient() {
+  return <GeoDashboardMap />;
+}
+```
+
+### Map Controllers
+
+The map uses multiple controller components for specific behaviors:
+
+- **MapResizeController**: Handles container resize and invalidates map size
+- **MapCursorController**: Changes cursor style in drawing mode
+- **MapInteractionController**: Manages click, mousemove, and mouseup events
+- **MapViewPersistenceController**: Saves map center and zoom to localStorage
+- **MapSearchFocusController**: Fits map bounds to search results
+
+## Basemap Providers
+
+Supported basemaps with configurable URLs and attributions:
+
+<ParamField path="osm" type="basemap">
+  OpenStreetMap - Standard tile layer
+  
+  ```
+  https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png
+  ```
+</ParamField>
+
+<ParamField path="googleSatellite" type="basemap">
+  Google Satellite - High-resolution satellite imagery
+  
+  ```
+  https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}
+  ```
+</ParamField>
+
+<ParamField path="topographic" type="basemap">
+  Topographic - Esri World Topo Map
+  
+  ```
+  https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}
+  ```
+</ParamField>
+
+<ParamField path="grayCanvas" type="basemap">
+  Gray Canvas - CARTO light basemap
+  
+  ```
+  https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png
+  ```
+</ParamField>
+
+<ParamField path="nationalGeographic" type="basemap">
+  National Geographic - Esri NatGeo World Map
+  
+  ```
+  https://services.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}
+  ```
+</ParamField>
+
+## Layer Management
+
+### Layer Structure
+
+Each layer is defined by:
+
+```typescript
+type MapLayer = {
+  id: string;                    // Unique identifier
+  name: string;                  // Display name
+  visible: boolean;              // Visibility toggle
+  opacity: number;               // 5-100%
+  color: string;                 // Default color (hex)
+  styleMode: "single" | "surfaceRange"; // Styling method
+  data: FeatureCollection;       // GeoJSON data
+};
+```
+
+### Layer Settings Persistence
+
+Layer settings are saved to `localStorage` under `geoDashboard.layerSettings.v1`:
+
+```typescript
+type PersistedLayerSetting = {
+  id: string;
+  visible: boolean;
+  opacity: number;
+  color: string;
+  styleMode: LayerStyleMode;
+  order: number;  // Layer z-index order
+};
+```
+
+### Surface Range Styling
+
+When `styleMode: "surfaceRange"`, polygons are colored by surface area:
+
+```typescript
+function colorForSurface(surfaceHa: number) {
+  if (surfaceHa < 10) return "#34d399";   // Green
+  if (surfaceHa < 50) return "#facc15";   // Yellow
+  if (surfaceHa < 150) return "#f97316";  // Orange
+  return "#ef4444";                       // Red
+}
+```
+
+## Feature Loading
+
+Geometries are loaded via the `/api/forest/geo/layers/nivel4` endpoint:
+
+```typescript
+const response = await fetch(
+  `/api/forest/geo/layers/nivel4?bbox=${minLon},${minLat},${maxLon},${maxLat}`,
+  { cache: "no-store" }
+);
+```
+
+**Response Format:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": { "type": "MultiPolygon", "coordinates": [...] },
+        "properties": {
+          "id": "uuid",
+          "level2Id": "uuid",
+          "level2Code": "N2-001",
+          "level2Name": "Finca Principal",
+          "level3Id": "uuid",
+          "level3Code": "N3-001",
+          "level3Name": "Lote Norte",
+          "level4Id": "uuid",
+          "level4Code": "N4-001",
+          "level4Name": "Rodal A",
+          "surfaceHa": 25.4567
+        }
+      }
+    ]
+  }
+}
+```
+
+## Search and Filtering
+
+### Hierarchy Filters
+
+Filter features by Level 2 (Finca), Level 3 (Lote), or Level 4 (Rodal):
+
+```typescript
+const filteredFeatures = features.filter(feature => {
+  const matchesLevel2 = !selectedLevel2 || feature.properties.level2Id === selectedLevel2;
+  const matchesLevel3 = !selectedLevel3 || feature.properties.level3Id === selectedLevel3;
+  const matchesLevel4 = !selectedLevel4 || feature.properties.level4Id === selectedLevel4;
+  return matchesLevel2 && matchesLevel3 && matchesLevel4;
+});
+```
+
+### Text Search
+
+Case-insensitive search across Level 4 codes, names, and IDs:
+
+```typescript
+const normalizedSearch = searchTerm.trim().toLowerCase();
+const matches = features.filter(feature => {
+  const code = feature.properties.level4Code.toLowerCase();
+  const name = feature.properties.level4Name.toLowerCase();
+  const id = feature.properties.level4Id.toLowerCase();
+  return code.includes(normalizedSearch) 
+    || name.includes(normalizedSearch)
+    || id.includes(normalizedSearch);
+});
+```
+
+### Polygon Visibility Modes
+
+<ParamField path="all" type="mode">
+  Show all features matching search/filter criteria
+</ParamField>
+
+<ParamField path="selected" type="mode">
+  Show only selected features (for focused work)
+</ParamField>
+
+<ParamField path="none" type="mode">
+  Hide all polygons (basemap only)
+</ParamField>
+
+## Drawing Tools
+
+### Distance Measurement
+
+Measure distances by clicking points on the map:
+
+```typescript
+const drawDistanceMeters = useMemo(() => {
+  if (drawPoints.length < 2) return 0;
+  let total = 0;
+  for (let i = 1; i < drawPoints.length; i++) {
+    total += haversineDistanceMeters(drawPoints[i - 1], drawPoints[i]);
+  }
+  return total;
+}, [drawPoints]);
+
+function formatDistance(meters: number) {
+  if (meters < 1000) return `${meters.toFixed(1)} m`;
+  return `${(meters / 1000).toFixed(3)} km`;
+}
+```
+
+### Area Measurement
+
+Measure polygon areas using Turf.js:
+
+```typescript
+import { area as turfArea, polygon as turfPolygon } from "@turf/turf";
+
+const drawAreaM2 = useMemo(() => {
+  if (drawPoints.length < 3) return 0;
+  const ring = drawPoints.map(p => [p.lng, p.lat]);
+  // Close the ring
+  if (ring[0] !== ring[ring.length - 1]) {
+    ring.push([ring[0][0], ring[0][1]]);
+  }
+  const poly = turfPolygon([ring]);
+  return turfArea(poly);
+}, [drawPoints]);
+
+function formatArea(areaM2: number) {
+  if (areaM2 >= 10000) return `${(areaM2 / 10000).toFixed(3)} ha`;
+  return `${areaM2.toFixed(1)} m²`;
+}
+```
+
+### Polygon Creation
+
+Create new Level 4 polygons by drawing:
+
+<Steps>
+  <Step title="Enter Drawing Mode">
+    Click the polygon creation tool and select Level 2 and Level 3 parents.
+  </Step>
+
+  <Step title="Draw Polygon">
+    Click to add vertices. The polygon auto-closes when you click near the first vertex (within 20 meters).
+  </Step>
+
+  <Step title="Fill Form">
+    Enter Level 4 details:
+    - Code
+    - Name
+    - Type (RODAL, PARCELA, etc.)
+    - FSC Certificate Status
+    - Current/Previous Land Use
+  </Step>
+
+  <Step title="Submit">
+    The system creates the Level 4 record and inserts geometry into `forest_geometry_n4`.
+  </Step>
+</Steps>
+
+**Snap Distance:**
+
+```typescript
+const SNAP_CLOSE_DISTANCE_METERS = 20;
+
+const isNearFirstVertex = useMemo(() => {
+  if (drawPoints.length < 3 || !pointerCoords) return false;
+  const first = drawPoints[0];
+  return haversineDistanceMeters(pointerCoords, first) < SNAP_CLOSE_DISTANCE_METERS;
+}, [drawPoints, pointerCoords]);
+```
+
+## Feature Selection
+
+### Multi-Select
+
+Select multiple features by toggling individual polygons:
+
+```typescript
+const [selectedFeatureIds, setSelectedFeatureIds] = useState<string[]>([]);
+
+function toggleFeature(level4Id: string) {
+  setSelectedFeatureIds(prev => 
+    prev.includes(level4Id)
+      ? prev.filter(id => id !== level4Id)
+      : [...prev, level4Id]
+  );
+}
+```
+
+### Selected Rodales Storage
+
+Selected features are stored in `localStorage` for use in other modules:
+
+```typescript
+type SelectedRodalStorageItem = {
+  level4Id: string;
+  level4Code: string;
+  level4Name: string;
+  level2Id: string;
+  level3Id: string;
+  layerId: string;
+  layerName: string;
+  surfaceHa: number | null;
+  savedAt: string;
+};
+
+writeSelectedRodalesTable(scope, selectedItems);
+```
+
+## Coordinate Capture
+
+Capture coordinates by clicking on the map:
+
+```typescript
+const [capturedCoords, setCapturedCoords] = useState<{lat: number, lng: number} | null>(null);
+const [capturedCoordsHistory, setCapturedCoordsHistory] = useState<Array<{
+  lat: number;
+  lng: number;
+  capturedAt: string;
+}>>([]);
+
+function handleMapClick(coords: {lat: number, lng: number}) {
+  if (!isCoordinateCaptureEnabled) return;
+  setCapturedCoords(coords);
+  setCapturedCoordsAt(new Date().toISOString());
+  setCapturedCoordsHistory(prev => [...prev, {
+    ...coords,
+    capturedAt: new Date().toISOString()
+  }]);
+}
+```
+
+**Export Coordinates:**
+
+- Export current coordinate
+- Export full history as CSV
+
+## Map Screenshot Export
+
+Export the current map view as PNG using html2canvas:
+
+```typescript
+import html2canvas from "html2canvas";
+
+async function exportMapImage() {
+  if (!mapWrapperRef.current) return;
+  
+  const canvas = await html2canvas(mapWrapperRef.current, {
+    useCORS: true,
+    allowTaint: false,
+    backgroundColor: "#ffffff"
+  });
+  
+  canvas.toBlob(blob => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `mapa-geo-${Date.now()}.png`;
+    link.click();
+    URL.revokeObjectURL(url);
+  });
+}
+```
+
+## UI Components
+
+### Legend Panel
+
+Displays active layers with feature count and total surface area:
+
+```typescript
+const currentSurfaceSummary = useMemo(() => {
+  const features = filteredVisibleLayers
+    .find(layer => layer.id === "rodales-activos")
+    ?.data.features ?? [];
+  
+  const total = features.reduce((sum, feature) => 
+    sum + (parseNumber(feature.properties.surfaceHa) ?? 0), 0
+  );
+  
+  return { count: features.length, total };
+}, [filteredVisibleLayers]);
+```
+
+### Layer Controls
+
+- **Visibility Toggle**: Eye icon to show/hide layer
+- **Opacity Slider**: 5-100% transparency
+- **Color Picker**: Change default layer color
+- **Style Mode**: Toggle between single color and surface range
+- **Layer Order**: Move up/down in z-index
+
+## State Persistence
+
+All user preferences are saved to localStorage:
+
+| Key | Data |
+|-----|------|
+| `geoDashboard.layerSettings.v1` | Layer visibility, opacity, color, order |
+| `geoDashboard.basemap.v1` | Selected basemap |
+| `geoDashboard.mapView.v1` | Map center (lat/lng) and zoom |
+| `geoDashboard.selectedFeatures.v1` | Selected feature IDs |
+| `geoDashboard.filters.v1` | Search term, hierarchy filters |
+
+## Performance Optimizations
+
+- **Memoized Calculations**: Use `useMemo` for expensive computations
+- **Debounced Search**: Avoid re-filtering on every keystroke
+- **Lazy Loading**: Dynamically import Leaflet to reduce bundle size
+- **BBOX Filtering**: Only load features within viewport bounds
+- **ResizeObserver**: Efficiently handle container resizes
+
+## Related Documentation
+
+- [Shapefile Import](/geo/shapefile-import) - Uploading geospatial data
+- [Data Hierarchy](/geo/data-hierarchy) - Forest patrimony structure
+- [Workers](/geo/workers) - Background processing

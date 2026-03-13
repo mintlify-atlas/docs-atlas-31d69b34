@@ -1,0 +1,767 @@
+---
+title: 'Users API'
+description: 'Manage users, authentication, and user roles in the SMyEG system'
+---
+
+## Overview
+
+The Users API provides endpoints for managing users in the SMyEG platform. This includes creating, listing, updating, and deleting users, as well as managing their roles and organization assignments.
+
+## Authentication
+
+All Users API endpoints require authentication via session token. Include the session token in your request headers:
+
+```http
+Authorization: Bearer <your-session-token>
+```
+
+## Authorization
+
+Users API endpoints require specific permissions:
+- **ADMIN** or **SUPER_ADMIN** roles have full access
+- Other users require specific module permissions: `users:READ`, `users:CREATE`, `users:UPDATE`, `users:DELETE`, `users:EXPORT`
+- **SUPER_ADMIN** can manage users across all organizations
+- **ADMIN** can only manage users within their organization
+
+---
+
+## List Users
+
+<RequestExample>
+```bash cURL
+curl -X GET "https://api.smyeg.com/api/users?page=1&limit=25" \
+  -H "Authorization: Bearer <token>"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.smyeg.com/api/users?page=1&limit=25', {
+  headers: {
+    'Authorization': 'Bearer <token>'
+  }
+});
+const data = await response.json();
+```
+</RequestExample>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174000",
+        "email": "user@example.com",
+        "firstName": "John",
+        "lastName": "Doe",
+        "status": "ACTIVE",
+        "organizationId": "org-uuid",
+        "organization": {
+          "id": "org-uuid",
+          "name": "Example Organization",
+          "slug": "example-org"
+        },
+        "userRoles": [
+          {
+            "id": "role-assignment-uuid",
+            "roleId": "role-uuid",
+            "role": {
+              "id": "role-uuid",
+              "name": "Admin",
+              "slug": "ADMIN"
+            },
+            "isActive": true,
+            "assignedAt": "2024-01-15T10:30:00Z"
+          }
+        ],
+        "createdAt": "2024-01-15T10:30:00Z",
+        "updatedAt": "2024-01-20T14:22:00Z"
+      }
+    ],
+    "pagination": {
+      "total": 100,
+      "page": 1,
+      "limit": 25,
+      "totalPages": 4
+    }
+  }
+}
+```
+</ResponseExample>
+
+### Query Parameters
+
+<ParamField query="page" type="integer" default="1">
+  Page number for pagination
+</ParamField>
+
+<ParamField query="limit" type="integer" default="25">
+  Number of items per page (max 100)
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search term to filter users by email, firstName, or lastName
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by user status
+  - `ACTIVE` - Active user account
+  - `INACTIVE` - Inactive user account
+  - `PENDING_VERIFICATION` - User awaiting email verification
+  - `LOCKED` - Account locked due to security
+  - `DELETED` - Soft-deleted account
+</ParamField>
+
+<ParamField query="role" type="string">
+  Filter by role slug (e.g., `ADMIN`, `USER`, `CONTADOR`)
+</ParamField>
+
+<ParamField query="sortBy" type="string">
+  Field to sort by: `email`, `status`, `createdAt`
+</ParamField>
+
+<ParamField query="sortOrder" type="string" default="desc">
+  Sort direction: `asc` or `desc`
+</ParamField>
+
+<ParamField query="organizationId" type="string">
+  Filter by organization (SUPER_ADMIN only)
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="items" type="array">
+  Array of user objects
+  
+  <ResponseField name="id" type="string">
+    Unique user identifier (UUID)
+  </ResponseField>
+  
+  <ResponseField name="email" type="string">
+    User's email address
+  </ResponseField>
+  
+  <ResponseField name="firstName" type="string">
+    User's first name
+  </ResponseField>
+  
+  <ResponseField name="lastName" type="string">
+    User's last name
+  </ResponseField>
+  
+  <ResponseField name="status" type="string">
+    Current account status
+  </ResponseField>
+  
+  <ResponseField name="organizationId" type="string">
+    Organization UUID the user belongs to
+  </ResponseField>
+  
+  <ResponseField name="organization" type="object">
+    Organization details
+  </ResponseField>
+  
+  <ResponseField name="userRoles" type="array">
+    Array of role assignments with role details
+  </ResponseField>
+  
+  <ResponseField name="createdAt" type="string">
+    ISO 8601 timestamp of user creation
+  </ResponseField>
+  
+  <ResponseField name="updatedAt" type="string">
+    ISO 8601 timestamp of last update
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata
+  
+  <ResponseField name="total" type="integer">
+    Total number of users matching the query
+  </ResponseField>
+  
+  <ResponseField name="page" type="integer">
+    Current page number
+  </ResponseField>
+  
+  <ResponseField name="limit" type="integer">
+    Items per page
+  </ResponseField>
+  
+  <ResponseField name="totalPages" type="integer">
+    Total number of pages
+  </ResponseField>
+</ResponseField>
+
+---
+
+## Create User
+
+<RequestExample>
+```bash cURL
+curl -X POST "https://api.smyeg.com/api/users" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "newuser@example.com",
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "roleSlug": "USER",
+    "password": "SecurePass123!",
+    "organizationId": "org-uuid"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.smyeg.com/api/users', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer <token>',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    email: 'newuser@example.com',
+    firstName: 'Jane',
+    lastName: 'Smith',
+    roleSlug: 'USER',
+    password: 'SecurePass123!',
+    organizationId: 'org-uuid'
+  })
+});
+const data = await response.json();
+```
+</RequestExample>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "data": {
+    "id": "new-user-uuid",
+    "email": "newuser@example.com",
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "status": "ACTIVE",
+    "organizationId": "org-uuid",
+    "organization": {
+      "id": "org-uuid",
+      "name": "Example Organization",
+      "slug": "example-org"
+    },
+    "userRoles": [
+      {
+        "id": "role-assignment-uuid",
+        "roleId": "role-uuid",
+        "role": {
+          "id": "role-uuid",
+          "name": "User",
+          "slug": "USER"
+        },
+        "isActive": true,
+        "assignedAt": "2024-01-15T10:30:00Z"
+      }
+    ],
+    "createdAt": "2024-01-15T10:30:00Z",
+    "updatedAt": "2024-01-15T10:30:00Z"
+  }
+}
+```
+</ResponseExample>
+
+### Request Body
+
+<ParamField body="email" type="string" required>
+  User's email address (must be unique)
+</ParamField>
+
+<ParamField body="firstName" type="string">
+  User's first name (minimum 2 characters)
+</ParamField>
+
+<ParamField body="lastName" type="string">
+  User's last name (minimum 2 characters)
+</ParamField>
+
+<ParamField body="roleSlug" type="string" required>
+  Role slug to assign to the user (e.g., `ADMIN`, `USER`, `CONTADOR`, `GERENTE_CAMPO`)
+</ParamField>
+
+<ParamField body="password" type="string">
+  User's password (minimum 8 characters). If not provided, a random password is generated and user status is set to `PENDING_VERIFICATION`
+</ParamField>
+
+<ParamField body="organizationId" type="string" required>
+  Organization UUID to assign the user to
+</ParamField>
+
+### Notes
+
+- If `password` is provided, user status is set to `ACTIVE`
+- If `password` is omitted, user status is set to `PENDING_VERIFICATION` and a random password is generated
+- An audit log entry is automatically created for user creation
+- The role must exist or will be provisioned automatically based on the roleSlug
+
+---
+
+## Get User by ID
+
+<RequestExample>
+```bash cURL
+curl -X GET "https://api.smyeg.com/api/users/{id}" \
+  -H "Authorization: Bearer <token>"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.smyeg.com/api/users/{id}', {
+  headers: {
+    'Authorization': 'Bearer <token>'
+  }
+});
+const data = await response.json();
+```
+</RequestExample>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "data": {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "email": "user@example.com",
+    "firstName": "John",
+    "lastName": "Doe",
+    "status": "ACTIVE",
+    "organizationId": "org-uuid",
+    "userRoles": [
+      {
+        "id": "role-assignment-uuid",
+        "roleId": "role-uuid",
+        "role": {
+          "id": "role-uuid",
+          "name": "Admin",
+          "slug": "ADMIN"
+        },
+        "isActive": true
+      }
+    ],
+    "profile": {
+      "id": "profile-uuid",
+      "bio": "Software engineer",
+      "jobTitle": "Senior Developer",
+      "department": "Engineering"
+    },
+    "createdAt": "2024-01-15T10:30:00Z",
+    "updatedAt": "2024-01-20T14:22:00Z"
+  }
+}
+```
+</ResponseExample>
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  User UUID
+</ParamField>
+
+---
+
+## Update User
+
+<RequestExample>
+```bash cURL
+curl -X PATCH "https://api.smyeg.com/api/users/{id}" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName": "John",
+    "lastName": "Smith",
+    "status": "ACTIVE",
+    "roleSlug": "ADMIN"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.smyeg.com/api/users/{id}', {
+  method: 'PATCH',
+  headers: {
+    'Authorization': 'Bearer <token>',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    firstName: 'John',
+    lastName: 'Smith',
+    status: 'ACTIVE',
+    roleSlug: 'ADMIN'
+  })
+});
+const data = await response.json();
+```
+</RequestExample>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "data": {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "email": "user@example.com",
+    "firstName": "John",
+    "lastName": "Smith",
+    "status": "ACTIVE",
+    "organizationId": "org-uuid",
+    "organization": {
+      "id": "org-uuid",
+      "name": "Example Organization"
+    },
+    "userRoles": [
+      {
+        "id": "new-role-assignment-uuid",
+        "roleId": "admin-role-uuid",
+        "role": {
+          "id": "admin-role-uuid",
+          "name": "Admin",
+          "slug": "ADMIN"
+        },
+        "isActive": true
+      }
+    ],
+    "updatedAt": "2024-01-20T15:30:00Z"
+  }
+}
+```
+</ResponseExample>
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  User UUID
+</ParamField>
+
+### Request Body
+
+<ParamField body="firstName" type="string">
+  User's first name (minimum 2 characters)
+</ParamField>
+
+<ParamField body="lastName" type="string">
+  User's last name (minimum 2 characters)
+</ParamField>
+
+<ParamField body="status" type="string">
+  Update user status: `ACTIVE`, `INACTIVE`, `LOCKED`, `PENDING_VERIFICATION`, `DELETED`
+</ParamField>
+
+<ParamField body="roleSlug" type="string">
+  Assign a new role to the user. Previous active roles will be deactivated.
+</ParamField>
+
+<ParamField body="organizationId" type="string">
+  Change user's organization
+</ParamField>
+
+### Notes
+
+- When `roleSlug` is provided, all previous active roles are deactivated and the new role is assigned
+- If the role doesn't exist, it will be provisioned automatically
+- An audit log entry is automatically created for the update
+- All fields are optional - only provided fields will be updated
+
+---
+
+## Delete User
+
+<RequestExample>
+```bash cURL
+curl -X DELETE "https://api.smyeg.com/api/users/{id}" \
+  -H "Authorization: Bearer <token>"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.smyeg.com/api/users/{id}', {
+  method: 'DELETE',
+  headers: {
+    'Authorization': 'Bearer <token>'
+  }
+});
+const data = await response.json();
+```
+</RequestExample>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "data": {
+    "message": "Usuario eliminado lógicamente"
+  }
+}
+```
+</ResponseExample>
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  User UUID
+</ParamField>
+
+### Notes
+
+- This performs a **soft delete** - the user is not permanently removed
+- User status is set to `DELETED`
+- User email is obfuscated: `deleted_{timestamp}_{id}@invalid.local`
+- All active sessions are revoked
+- An audit log entry is automatically created
+- The user cannot log in after deletion
+
+---
+
+## Import Users
+
+<RequestExample>
+```bash cURL
+curl -X POST "https://api.smyeg.com/api/users/import" \
+  -H "Authorization: Bearer <token>" \
+  -F "file=@users.xlsx"
+```
+
+```javascript JavaScript
+const formData = new FormData();
+formData.append('file', fileInput.files[0]);
+
+const response = await fetch('https://api.smyeg.com/api/users/import', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer <token>'
+  },
+  body: formData
+});
+const data = await response.json();
+```
+</RequestExample>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "data": {
+    "created": 45,
+    "updated": 5,
+    "skipped": 2,
+    "errors": [
+      {
+        "row": 10,
+        "email": "invalid@example.com",
+        "error": "El usuario ya existe"
+      },
+      {
+        "row": 25,
+        "email": "baddata@example.com",
+        "error": "Datos inválidos"
+      }
+    ]
+  }
+}
+```
+</ResponseExample>
+
+### Request
+
+<ParamField body="file" type="file" required>
+  CSV or XLSX file containing user data
+</ParamField>
+
+### File Format
+
+Supported file formats: **CSV** and **XLSX**
+
+**Required columns:**
+- `email` - User's email address
+- `roleSlug` / `role` / `rol` - Role to assign
+
+**Optional columns:**
+- `firstName` / `nombres` / `nombre` - User's first name
+- `lastName` / `apellidos` / `apellido` - User's last name
+- `password` / `contrasena` / `contraseña` - User's password
+- `organizationId` / `organization` / `organizacionId` / `organizacion` - Organization reference (ID, name, or slug)
+
+**Example CSV:**
+```csv
+email,firstName,lastName,roleSlug,password,organizationId
+user1@example.com,John,Doe,USER,Pass123!,org-uuid
+user2@example.com,Jane,Smith,ADMIN,,my-organization
+```
+
+### Response Fields
+
+<ResponseField name="created" type="integer">
+  Number of new users created
+</ResponseField>
+
+<ResponseField name="updated" type="integer">
+  Number of existing users updated
+</ResponseField>
+
+<ResponseField name="skipped" type="integer">
+  Number of rows skipped due to errors
+</ResponseField>
+
+<ResponseField name="errors" type="array">
+  Array of error objects for failed rows
+  
+  <ResponseField name="row" type="integer">
+    Row number in the file (1-based, excluding header)
+  </ResponseField>
+  
+  <ResponseField name="email" type="string">
+    Email from the failed row
+  </ResponseField>
+  
+  <ResponseField name="error" type="string">
+    Error message describing the failure
+  </ResponseField>
+</ResponseField>
+
+### Notes
+
+- If a user with the same email exists, they will be updated (if permissions allow)
+- Organization can be referenced by UUID, name, or slug
+- Non-SUPER_ADMIN users can only import users to their own organization
+- If password is not provided, a random password is generated
+- Column names are case-insensitive and accent-insensitive
+
+---
+
+## Export Users
+
+<RequestExample>
+```bash cURL (CSV)
+curl -X GET "https://api.smyeg.com/api/users/export?format=csv&limit=1000" \
+  -H "Authorization: Bearer <token>" \
+  -o users.csv
+```
+
+```bash cURL (XLSX)
+curl -X GET "https://api.smyeg.com/api/users/export?format=xlsx&limit=1000" \
+  -H "Authorization: Bearer <token>" \
+  -o users.xlsx
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.smyeg.com/api/users/export?format=xlsx&limit=1000',
+  {
+    headers: {
+      'Authorization': 'Bearer <token>'
+    }
+  }
+);
+const blob = await response.blob();
+// Save file or create download link
+```
+</RequestExample>
+
+### Query Parameters
+
+<ParamField query="format" type="string" default="csv">
+  Export format: `csv` or `xlsx`
+</ParamField>
+
+<ParamField query="limit" type="integer" default="100">
+  Maximum number of users to export (up to 5000)
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search term to filter users
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by user status
+</ParamField>
+
+<ParamField query="role" type="string">
+  Filter by role slug
+</ParamField>
+
+<ParamField query="sortBy" type="string">
+  Field to sort by: `email`, `status`, `createdAt`
+</ParamField>
+
+<ParamField query="sortOrder" type="string" default="desc">
+  Sort direction: `asc` or `desc`
+</ParamField>
+
+<ParamField query="organizationId" type="string">
+  Filter by organization (SUPER_ADMIN only)
+</ParamField>
+
+### Export Format
+
+**Exported columns:**
+- `email` - User's email address
+- `firstName` / `Nombres` - User's first name
+- `lastName` / `Apellidos` - User's last name
+- `status` / `Estatus` - User status
+- `roleSlug` / `Rol` - Assigned role
+- `organizationId` / `Organización ID` - Organization UUID
+- `organizationName` / `Organización` - Organization name
+- `createdAt` / `Fecha` - Creation timestamp
+
+### Notes
+
+- Maximum export limit is configurable via `USERS_EXPORT_MAX_LIMIT` environment variable (default: 5000)
+- Files are named with the current date: `users_2024-01-15.csv` or `users_2024-01-15.xlsx`
+- CSV files use UTF-8 encoding
+- XLSX files include proper formatting and headers
+
+---
+
+## Error Responses
+
+All endpoints return standard error responses:
+
+```json
+{
+  "success": false,
+  "error": {
+    "message": "Error message",
+    "code": 400,
+    "details": {}
+  }
+}
+```
+
+### Common Error Codes
+
+- `400` - Bad Request (invalid parameters or request body)
+- `401` - Unauthorized (missing or invalid authentication)
+- `403` - Forbidden (insufficient permissions)
+- `404` - Not Found (user not found)
+- `409` - Conflict (user already exists)
+- `500` - Internal Server Error
+
+---
+
+## User Status Values
+
+| Status | Description |
+|--------|-------------|
+| `ACTIVE` | User account is active and can log in |
+| `INACTIVE` | User account is inactive |
+| `PENDING_VERIFICATION` | User awaiting email verification |
+| `LOCKED` | Account locked due to failed login attempts or security |
+| `DELETED` | Soft-deleted account (cannot log in) |
+
+---
+
+## Available Roles
+
+| Role Slug | Description |
+|-----------|-------------|
+| `SUPER_ADMIN` | Full system access across all organizations |
+| `ADMIN` | Organization administrator with full access |
+| `CONTADOR` | Accountant role with read access to forest patrimony |
+| `GERENTE_CAMPO` | Field manager with read access to users and forest data |
+| `USER` | Basic user with dashboard access |
+
+Custom roles can be created via the [Roles API](/api/roles/overview).

@@ -1,97 +1,95 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Welcome to SMyEG"
+description: "Sistema de Monitoreo y Evaluación Geoespacial - A powerful platform for forest patrimony management and geospatial monitoring"
 ---
 
-## Setting up
+## Overview
 
-Get your documentation site up and running in minutes.
+SMyEG (Sistema de Monitoreo y Evaluación Geoespacial) is a comprehensive full-stack geospatial monitoring and evaluation platform designed for forest patrimony management. Built with Next.js, React, and PostgreSQL, it provides powerful tools for managing forest assets, tracking biological resources, and analyzing land use across hierarchical organizational structures.
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
+<CardGroup cols={2}>
   <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
+    title="Get Started"
+    icon="rocket"
+    href="/quickstart"
   >
-    Edit your docs locally and preview them in real time.
+    Set up SMyEG and create your first organization
   </Card>
   <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
+    title="Installation Guide"
+    icon="download"
+    href="/installation"
   >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+    Install and configure SMyEG for your environment
   </Card>
   <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
-
-## Create beautiful pages
-
-Everything you need to create world-class documentation.
-
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
+    title="API Reference"
     icon="code"
-    href="/essentials/code"
+    href="/api/auth/login"
   >
-    Add sample code to demonstrate how to use your product.
+    Explore the complete API documentation
   </Card>
   <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
+    title="Deployment"
+    icon="server"
+    href="/deployment/docker"
   >
-    Display images and other media.
+    Deploy SMyEG with Docker or PM2
+  </Card>
+</CardGroup>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card
+    title="Multi-Organization Support"
+    icon="building"
+    href="/features/organizations"
+  >
+    Manage multiple organizations with role-based access control and hierarchical permissions
   </Card>
   <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
+    title="Geospatial Data Management"
+    icon="map"
+    href="/features/geospatial-data"
   >
-    Write once and reuse across your docs.
+    Import and visualize shapefiles with interactive Leaflet maps
   </Card>
-</Columns>
+  <Card
+    title="Forest Patrimony"
+    icon="tree"
+    href="/modules/forest-patrimony"
+  >
+    Track forest assets across hierarchical levels from fincas to rodales
+  </Card>
+  <Card
+    title="Biological Assets"
+    icon="leaf"
+    href="/modules/biological-assets"
+  >
+    Monitor and measure biological assets with campaign tracking
+  </Card>
+  <Card
+    title="Background Workers"
+    icon="gears"
+    href="/geo/workers"
+  >
+    Process geospatial imports and calculations asynchronously
+  </Card>
+  <Card
+    title="Audit System"
+    icon="clipboard-list"
+    href="/modules/audit-system"
+  >
+    Comprehensive audit logging with partitioned storage
+  </Card>
+</CardGroup>
 
-## Need inspiration?
+## Core Capabilities
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+- **Authentication & Authorization**: NextAuth v5 with credential provider and role-based permissions
+- **Shapefile Import**: Validate and process geospatial data with automatic hierarchy linking
+- **Land Accounting**: Calculate forest areas and track land use changes over time
+- **Measurement Campaigns**: Create and manage biological asset measurement campaigns
+- **Dashboard Analytics**: Real-time metrics and visualizations for decision-making
+- **Multi-tenant Architecture**: Secure organization isolation with comprehensive access control

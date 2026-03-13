@@ -1,0 +1,457 @@
+---
+title: 'Measurement Observations'
+api: 'Multiple /api/assets/measurement-observations'
+---
+
+# Measurement Observations API
+
+Record and manage field measurement observations within campaigns. Each observation contains protocol-specific data collected from forest patrimony units.
+
+## Overview
+
+Observations are individual measurement records associated with a campaign. The payload structure varies by protocol type and contains the actual field measurements.
+
+### Observation Structure
+
+- **campaignId**: Links to measurement campaign
+- **level5UnitCode**: Optional reference to Level 5 sampling unit
+- **sectionKey**: Optional section identifier for spatial organization
+- **observedAt**: Measurement timestamp
+- **payload**: JSON object with protocol-specific measurements
+
+---
+
+## List Observations
+
+<api-endpoint method="GET" path="/api/assets/measurement-observations">
+Retrieve a paginated list of measurement observations.
+</api-endpoint>
+
+### Query Parameters
+
+<ParamField query="campaignId" type="uuid">
+  Filter by campaign ID
+</ParamField>
+
+<ParamField query="domain" type="enum">
+  Filter by domain: `BIOLOGICO`, `HIDROLOGICO`, `DENDROMETRICO`, `DEMOGRAFICO`
+</ParamField>
+
+<ParamField query="protocolType" type="enum">
+  Filter by protocol type
+</ParamField>
+
+<ParamField query="level5UnitCode" type="string">
+  Filter by Level 5 unit code (case-insensitive partial match)
+</ParamField>
+
+<ParamField query="sectionKey" type="string">
+  Filter by section key (case-insensitive partial match)
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search in level5UnitCode, sectionKey, or campaign code/name
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  Page number for pagination
+</ParamField>
+
+<ParamField query="limit" type="integer" default="25">
+  Number of records per page
+</ParamField>
+
+<ParamField query="sortBy" type="enum" default="observedAt">
+  Sort field: `observedAt`, `level5UnitCode`, `sectionKey`, `createdAt`, `updatedAt`
+</ParamField>
+
+<ParamField query="sortOrder" type="enum" default="desc">
+  Sort order: `asc`, `desc`
+</ParamField>
+
+### Response
+
+<ResponseField name="items" type="array">
+  Array of observation objects
+  
+  <ResponseField name="id" type="uuid">
+    Observation unique identifier
+  </ResponseField>
+  
+  <ResponseField name="campaignId" type="uuid">
+    Parent campaign ID
+  </ResponseField>
+  
+  <ResponseField name="campaign" type="object">
+    Campaign summary
+    
+    <ResponseField name="id" type="uuid">
+      Campaign ID
+    </ResponseField>
+    
+    <ResponseField name="campaignCode" type="string">
+      Campaign code
+    </ResponseField>
+    
+    <ResponseField name="campaignName" type="string">
+      Campaign name
+    </ResponseField>
+    
+    <ResponseField name="domain" type="enum">
+      Domain
+    </ResponseField>
+    
+    <ResponseField name="protocolType" type="enum">
+      Protocol type
+    </ResponseField>
+  </ResponseField>
+  
+  <ResponseField name="level5UnitCode" type="string" optional>
+    Level 5 sampling unit code
+  </ResponseField>
+  
+  <ResponseField name="sectionKey" type="string" optional>
+    Section identifier
+  </ResponseField>
+  
+  <ResponseField name="observedAt" type="datetime" optional>
+    Observation timestamp
+  </ResponseField>
+  
+  <ResponseField name="payload" type="object">
+    Protocol-specific measurement data (JSON)
+  </ResponseField>
+  
+  <ResponseField name="createdAt" type="datetime">
+    Creation timestamp
+  </ResponseField>
+  
+  <ResponseField name="updatedAt" type="datetime">
+    Last update timestamp
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  <ResponseField name="total" type="integer">
+    Total number of records
+  </ResponseField>
+  
+  <ResponseField name="page" type="integer">
+    Current page number
+  </ResponseField>
+  
+  <ResponseField name="limit" type="integer">
+    Records per page
+  </ResponseField>
+  
+  <ResponseField name="totalPages" type="integer">
+    Total number of pages
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.example.com/api/assets/measurement-observations?campaignId=campaign-uuid&page=1&limit=10" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "items": [
+    {
+      "id": "obs-uuid",
+      "campaignId": "campaign-uuid",
+      "campaign": {
+        "id": "campaign-uuid",
+        "campaignCode": "SURV-2026-Q1",
+        "campaignName": "Survival Assessment Q1 2026",
+        "domain": "BIOLOGICO",
+        "protocolType": "BIO_SOBREVIVENCIA"
+      },
+      "level5UnitCode": "P001",
+      "sectionKey": "L1-U1",
+      "observedAt": "2026-03-15T10:30:00.000Z",
+      "payload": {
+        "lineId": 1,
+        "sampleUnitId": 1,
+        "spacingL1": 3.0,
+        "spacingL2": 3.0,
+        "liveNormal": 105,
+        "liveAtipic": 2,
+        "liveDrought": 0,
+        "livePest": 1,
+        "deadPest": 0,
+        "deadDrought": 1,
+        "deadMech": 0,
+        "missingCount": 2,
+        "avgHeight": 2.5
+      },
+      "createdAt": "2026-03-15T10:35:00.000Z",
+      "updatedAt": "2026-03-15T10:35:00.000Z"
+    }
+  ],
+  "pagination": {
+    "total": 45,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 5
+  }
+}
+```
+
+---
+
+## Create Observation
+
+<api-endpoint method="POST" path="/api/assets/measurement-observations">
+Create a new measurement observation.
+</api-endpoint>
+
+### Request Body
+
+<ParamField body="campaignId" type="uuid" required>
+  Campaign ID to associate observation with
+</ParamField>
+
+<ParamField body="level5UnitCode" type="string">
+  Level 5 sampling unit code
+</ParamField>
+
+<ParamField body="sectionKey" type="string">
+  Section identifier for spatial organization
+</ParamField>
+
+<ParamField body="observedAt" type="datetime">
+  Measurement timestamp
+</ParamField>
+
+<ParamField body="payload" type="object" required>
+  Protocol-specific measurement data (JSON object)
+</ParamField>
+
+### Protocol Validation
+
+For `BIO_SOBREVIVENCIA` protocol, the payload is validated against specific business rules:
+
+**Required Fields:**
+- `lineId` (integer > 0)
+- `sampleUnitId` (integer > 0)
+- `spacingL1` (number > 0)
+- `spacingL2` (number > 0)
+- `liveNormal` (number >= 0)
+- `missingCount` (number >= 0)
+- `avgHeight` (number >= 0)
+
+**Optional Fields:**
+- `liveAtipic` (number >= 0, default 0)
+- `liveDrought` (number >= 0, default 0)
+- `livePest` (number >= 0, default 0)
+- `deadPest` (number >= 0, default 0)
+- `deadDrought` (number >= 0, default 0)
+- `deadMech` (number >= 0, default 0)
+
+**Business Rule:**
+The sum of live + dead + missing must match the theoretical density:
+```
+evaluatedPoints = liveTotal + deadTotal + missingCount
+expectedPoints = 100 / (spacingL1 * spacingL2)
+|evaluatedPoints - expectedPoints| <= 1
+```
+
+<Note>
+  Other protocols have their own validation rules. Generic protocols accept any valid JSON payload.
+</Note>
+
+### Response
+
+Returns the created observation object with HTTP status `201 Created`.
+
+### Example Request (BIO_SOBREVIVENCIA)
+
+```bash
+curl -X POST "https://api.example.com/api/assets/measurement-observations" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "campaignId": "campaign-uuid",
+    "level5UnitCode": "P001",
+    "sectionKey": "L1-U1",
+    "observedAt": "2026-03-15T10:30:00Z",
+    "payload": {
+      "lineId": 1,
+      "sampleUnitId": 1,
+      "spacingL1": 3.0,
+      "spacingL2": 3.0,
+      "liveNormal": 105,
+      "liveAtipic": 2,
+      "liveDrought": 0,
+      "livePest": 1,
+      "deadPest": 0,
+      "deadDrought": 1,
+      "deadMech": 0,
+      "missingCount": 2,
+      "avgHeight": 2.5
+    }
+  }'
+```
+
+---
+
+## Update Observation
+
+<api-endpoint method="PATCH" path="/api/assets/measurement-observations">
+Update an existing measurement observation.
+</api-endpoint>
+
+### Request Body
+
+<ParamField body="id" type="uuid" required>
+  Observation ID to update
+</ParamField>
+
+<ParamField body="level5UnitCode" type="string">
+  Updated Level 5 unit code
+</ParamField>
+
+<ParamField body="sectionKey" type="string">
+  Updated section key
+</ParamField>
+
+<ParamField body="observedAt" type="datetime">
+  Updated observation timestamp
+</ParamField>
+
+<ParamField body="payload" type="object">
+  Updated measurement data
+</ParamField>
+
+<Note>
+  At least one field besides `id` must be provided. Payload updates are validated against the campaign's protocol type.
+</Note>
+
+### Response
+
+Returns the updated observation object.
+
+---
+
+## Delete Observation
+
+<api-endpoint method="DELETE" path="/api/assets/measurement-observations">
+Delete a measurement observation.
+</api-endpoint>
+
+### Request Body
+
+<ParamField body="id" type="uuid" required>
+  Observation ID to delete
+</ParamField>
+
+### Response
+
+Returns the deleted observation ID.
+
+```json
+{
+  "id": "observation-uuid"
+}
+```
+
+---
+
+## Protocol Payload Examples
+
+### BIO_PREOPERATIVO
+
+```json
+{
+  "sampleAreaHa": 0.1,
+  "targetDensityHa": 1111,
+  "establishedPlants": 110,
+  "failedPlants": 5
+}
+```
+
+### BIO_PRECOSECHA
+
+```json
+{
+  "sampleAreaHa": 0.25,
+  "treesMarked": 95,
+  "treesHarvestable": 100,
+  "estimatedVolumeM3": 45.5,
+  "qualityAcceptedTrees": 90
+}
+```
+
+### HIDRO_ESTACION_HIDROLOGICA
+
+```json
+{
+  "flowM3s": 12.5,
+  "waterLevelM": 3.2,
+  "sensorStatus": "OK",
+  "measurementDateTime": "2026-03-15T08:00:00Z"
+}
+```
+
+### HIDRO_ESTACION_METEOROLOGICA
+
+```json
+{
+  "precipitationMm24h": 45.2,
+  "airTempC": 28.5,
+  "relHumidityPct": 75,
+  "windSpeedMps": 3.5,
+  "sensorStatus": "OK",
+  "measurementDateTime": "2026-03-15T12:00:00Z"
+}
+```
+
+### DENDRO_PARCELA_CARBONO
+
+```json
+{
+  "sampleAreaHa": 0.04,
+  "aboveBiomassT": 12.5,
+  "belowBiomassT": 3.2,
+  "litterBiomassT": 1.5
+}
+```
+
+### DEMO_ENCUESTA_NUCLEO_FAMILIAR
+
+```json
+{
+  "householdMembers": 5,
+  "monthlyIncomeUsd": 450,
+  "foodSecure": 1,
+  "schoolAgeChildren": 2,
+  "schoolingChildren": 2
+}
+```
+
+---
+
+## Permissions
+
+All observation endpoints require authentication and appropriate permissions:
+
+- **GET**: Requires `asset-measurement:READ` or any write permission
+- **POST**: Requires `asset-measurement:CREATE`
+- **PATCH**: Requires `asset-measurement:UPDATE`
+- **DELETE**: Requires `asset-measurement:DELETE`
+
+Super admins bypass organization restrictions.
+
+## Audit Logging
+
+All create, update, and delete operations are logged to the audit log with:
+- User ID
+- Action type (CREATE, UPDATE, DELETE)
+- Entity type: `AssetMeasurementObservation`
+- Entity ID
+- Changed values

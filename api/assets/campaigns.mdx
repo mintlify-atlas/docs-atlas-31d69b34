@@ -1,0 +1,434 @@
+---
+title: 'Measurement Campaigns'
+api: 'Multiple /api/assets/measurement-campaigns'
+---
+
+# Measurement Campaigns API
+
+Manage measurement campaigns for tracking biological, hydrological, dendrometric, and demographic assets across forest patrimony units.
+
+## Overview
+
+Measurement campaigns organize field observations under specific protocols and dates. Each campaign is associated with a Level 4 forest patrimony unit and follows a structured measurement protocol.
+
+### Domain Types
+
+- `BIOLOGICO` - Biological assets (survival, growth, health)
+- `HIDROLOGICO` - Hydrological monitoring (flow, precipitation)
+- `DENDROMETRICO` - Dendrometric measurements (volume, diameter)
+- `DEMOGRAFICO` - Demographic surveys (community, household)
+
+### Protocol Types
+
+**Biological Domain:**
+- `BIO_SOBREVIVENCIA` - Survival rate assessment
+- `BIO_PREOPERATIVO` - Pre-operational inventory
+- `BIO_PRECOSECHA` - Pre-harvest evaluation
+- `BIO_CONTINUO` - Continuous monitoring
+- `BIO_PARCELAS_PERMANENTES` - Permanent plots
+
+**Hydrological Domain:**
+- `HIDRO_ESTACION_METEOROLOGICA` - Weather station
+- `HIDRO_ESTACION_HIDROLOGICA` - Hydrological station
+
+**Dendrometric Domain:**
+- `DENDRO_PARCELA_MULTIPROPOSITO` - Multi-purpose plots
+- `DENDRO_PARCELA_CARBONO` - Carbon sequestration plots
+
+**Demographic Domain:**
+- `DEMO_ENCUESTA_COMUNIDAD` - Community survey
+- `DEMO_ENCUESTA_NUCLEO_FAMILIAR` - Household survey
+
+---
+
+## List Campaigns
+
+<api-endpoint method="GET" path="/api/assets/measurement-campaigns">
+Retrieve a paginated list of measurement campaigns.
+</api-endpoint>
+
+### Query Parameters
+
+<ParamField query="level4Id" type="uuid">
+  Filter by forest patrimony Level 4 unit ID
+</ParamField>
+
+<ParamField query="domain" type="enum">
+  Filter by domain: `BIOLOGICO`, `HIDROLOGICO`, `DENDROMETRICO`, `DEMOGRAFICO`
+</ParamField>
+
+<ParamField query="protocolType" type="enum">
+  Filter by specific protocol type (see Protocol Types above)
+</ParamField>
+
+<ParamField query="status" type="enum">
+  Filter by campaign status: `DRAFT`, `ACTIVE`, `CLOSED`, `CANCELLED`
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search in campaign code or name (case-insensitive)
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  Page number for pagination
+</ParamField>
+
+<ParamField query="limit" type="integer" default="25">
+  Number of records per page
+</ParamField>
+
+<ParamField query="sortBy" type="enum" default="campaignDate">
+  Sort field: `campaignDate`, `campaignCode`, `campaignName`, `status`, `createdAt`
+</ParamField>
+
+<ParamField query="sortOrder" type="enum" default="desc">
+  Sort order: `asc`, `desc`
+</ParamField>
+
+### Response
+
+<ResponseField name="items" type="array">
+  Array of campaign objects
+  
+  <ResponseField name="id" type="uuid">
+    Campaign unique identifier
+  </ResponseField>
+  
+  <ResponseField name="organizationId" type="uuid">
+    Organization ID
+  </ResponseField>
+  
+  <ResponseField name="level4Id" type="uuid">
+    Forest patrimony Level 4 unit ID
+  </ResponseField>
+  
+  <ResponseField name="level4" type="object">
+    Level 4 unit details
+    
+    <ResponseField name="id" type="uuid">
+      Unit ID
+    </ResponseField>
+    
+    <ResponseField name="code" type="string">
+      Unit code
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Unit name
+    </ResponseField>
+  </ResponseField>
+  
+  <ResponseField name="domain" type="enum">
+    Asset domain
+  </ResponseField>
+  
+  <ResponseField name="protocolType" type="enum">
+    Measurement protocol type
+  </ResponseField>
+  
+  <ResponseField name="campaignCode" type="string">
+    Unique campaign code (max 120 chars)
+  </ResponseField>
+  
+  <ResponseField name="campaignName" type="string">
+    Campaign display name
+  </ResponseField>
+  
+  <ResponseField name="campaignDate" type="datetime">
+    Campaign reference date
+  </ResponseField>
+  
+  <ResponseField name="schemaVersion" type="string">
+    Data schema version (e.g., "1.0")
+  </ResponseField>
+  
+  <ResponseField name="status" type="enum">
+    Campaign status: `DRAFT`, `ACTIVE`, `CLOSED`, `CANCELLED`
+  </ResponseField>
+  
+  <ResponseField name="notes" type="string" optional>
+    Additional notes or comments
+  </ResponseField>
+  
+  <ResponseField name="metadata" type="object" optional>
+    Custom metadata JSON object
+  </ResponseField>
+  
+  <ResponseField name="_count" type="object">
+    Related entity counts
+    
+    <ResponseField name="observations" type="integer">
+      Number of observations
+    </ResponseField>
+    
+    <ResponseField name="results" type="integer">
+      Number of result snapshots
+    </ResponseField>
+    
+    <ResponseField name="calculationJobs" type="integer">
+      Number of calculation jobs
+    </ResponseField>
+  </ResponseField>
+  
+  <ResponseField name="createdAt" type="datetime">
+    Creation timestamp
+  </ResponseField>
+  
+  <ResponseField name="updatedAt" type="datetime">
+    Last update timestamp
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  <ResponseField name="total" type="integer">
+    Total number of records
+  </ResponseField>
+  
+  <ResponseField name="page" type="integer">
+    Current page number
+  </ResponseField>
+  
+  <ResponseField name="limit" type="integer">
+    Records per page
+  </ResponseField>
+  
+  <ResponseField name="totalPages" type="integer">
+    Total number of pages
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.example.com/api/assets/measurement-campaigns?domain=BIOLOGICO&status=ACTIVE&page=1&limit=10" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "items": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "organizationId": "org-uuid",
+      "level4Id": "level4-uuid",
+      "level4": {
+        "id": "level4-uuid",
+        "code": "R001",
+        "name": "Rodal Principal"
+      },
+      "domain": "BIOLOGICO",
+      "protocolType": "BIO_SOBREVIVENCIA",
+      "campaignCode": "SURV-2026-Q1",
+      "campaignName": "Survival Assessment Q1 2026",
+      "campaignDate": "2026-03-15T00:00:00.000Z",
+      "schemaVersion": "1.0",
+      "status": "ACTIVE",
+      "notes": "Post-planting survival measurement",
+      "metadata": {
+        "ageMonths": 6,
+        "weather": "dry"
+      },
+      "_count": {
+        "observations": 45,
+        "results": 2,
+        "calculationJobs": 1
+      },
+      "createdAt": "2026-03-01T10:00:00.000Z",
+      "updatedAt": "2026-03-10T15:30:00.000Z"
+    }
+  ],
+  "pagination": {
+    "total": 1,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 1
+  }
+}
+```
+
+---
+
+## Create Campaign
+
+<api-endpoint method="POST" path="/api/assets/measurement-campaigns">
+Create a new measurement campaign.
+</api-endpoint>
+
+### Request Body
+
+<ParamField body="level4Id" type="uuid" required>
+  Forest patrimony Level 4 unit ID
+</ParamField>
+
+<ParamField body="domain" type="enum" required>
+  Asset domain: `BIOLOGICO`, `HIDROLOGICO`, `DENDROMETRICO`, `DEMOGRAFICO`
+</ParamField>
+
+<ParamField body="protocolType" type="enum" required>
+  Measurement protocol type (see Protocol Types section)
+</ParamField>
+
+<ParamField body="campaignCode" type="string" required>
+  Unique campaign code (1-120 chars)
+</ParamField>
+
+<ParamField body="campaignName" type="string" required>
+  Campaign display name (2-255 chars)
+</ParamField>
+
+<ParamField body="campaignDate" type="datetime" required>
+  Campaign reference date
+</ParamField>
+
+<ParamField body="schemaVersion" type="string" default="1.0">
+  Data schema version (max 32 chars)
+</ParamField>
+
+<ParamField body="status" type="enum" default="DRAFT">
+  Initial campaign status: `DRAFT`, `ACTIVE`, `CLOSED`, `CANCELLED`
+</ParamField>
+
+<ParamField body="notes" type="string">
+  Additional notes or comments
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata JSON object
+</ParamField>
+
+### Response
+
+Returns the created campaign object with HTTP status `201 Created`.
+
+<Note>
+  The campaign code must be unique within the organization. The Level 4 unit must belong to the user's organization (unless super admin).
+</Note>
+
+### Example Request
+
+```bash
+curl -X POST "https://api.example.com/api/assets/measurement-campaigns" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "level4Id": "level4-uuid",
+    "domain": "BIOLOGICO",
+    "protocolType": "BIO_SOBREVIVENCIA",
+    "campaignCode": "SURV-2026-Q1",
+    "campaignName": "Survival Assessment Q1 2026",
+    "campaignDate": "2026-03-15",
+    "status": "ACTIVE",
+    "notes": "6-month post-planting assessment"
+  }'
+```
+
+---
+
+## Update Campaign
+
+<api-endpoint method="PATCH" path="/api/assets/measurement-campaigns">
+Update an existing measurement campaign.
+</api-endpoint>
+
+### Request Body
+
+<ParamField body="id" type="uuid" required>
+  Campaign ID to update
+</ParamField>
+
+<ParamField body="campaignName" type="string">
+  Updated campaign name (2-255 chars)
+</ParamField>
+
+<ParamField body="campaignDate" type="datetime">
+  Updated campaign date
+</ParamField>
+
+<ParamField body="schemaVersion" type="string">
+  Updated schema version
+</ParamField>
+
+<ParamField body="status" type="enum">
+  Updated status: `DRAFT`, `ACTIVE`, `CLOSED`, `CANCELLED`
+</ParamField>
+
+<ParamField body="notes" type="string">
+  Updated notes
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Updated metadata
+</ParamField>
+
+<Note>
+  At least one field besides `id` must be provided. Campaign code, domain, protocol type, and level4Id cannot be changed after creation.
+</Note>
+
+### Response
+
+Returns the updated campaign object.
+
+### Example Request
+
+```bash
+curl -X PATCH "https://api.example.com/api/assets/measurement-campaigns" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "campaign-uuid",
+    "status": "CLOSED",
+    "notes": "Campaign completed successfully"
+  }'
+```
+
+---
+
+## Delete Campaign
+
+<api-endpoint method="DELETE" path="/api/assets/measurement-campaigns">
+Delete a measurement campaign.
+</api-endpoint>
+
+### Request Body
+
+<ParamField body="id" type="uuid" required>
+  Campaign ID to delete
+</ParamField>
+
+<Note>
+  Campaigns with observations or results cannot be deleted. Returns HTTP 409 if the campaign has associated data.
+</Note>
+
+### Response
+
+Returns the deleted campaign ID.
+
+```json
+{
+  "id": "campaign-uuid"
+}
+```
+
+---
+
+## Permissions
+
+All campaign endpoints require authentication and appropriate permissions:
+
+- **GET**: Requires `asset-measurement:READ` or any write permission
+- **POST**: Requires `asset-measurement:CREATE`
+- **PATCH**: Requires `asset-measurement:UPDATE`
+- **DELETE**: Requires `asset-measurement:DELETE`
+
+Super admins bypass organization restrictions.
+
+## Audit Logging
+
+All create, update, and delete operations are logged to the audit log with:
+- User ID
+- Action type (CREATE, UPDATE, DELETE)
+- Entity type: `AssetMeasurementCampaign`
+- Entity ID
+- Changed values

@@ -1,0 +1,264 @@
+---
+title: 'Shapefile Import'
+description: 'Import geospatial data for Level 4 forest units using shapefile ZIP files'
+---
+
+## Overview
+
+SMyEG supports importing geospatial data for Level 4 forest units (rodales, parcelas, etc.) through shapefile ZIP uploads. The import process validates hierarchy relationships, extracts geometry, calculates surface area, and creates land use variation records when detected.
+
+## Required Files in ZIP
+
+Every shapefile import **must** include these four files:
+
+<ParamField path=".shp" type="file" required>
+  Main shapefile containing geometry data
+</ParamField>
+
+<ParamField path=".shx" type="file" required>
+  Shape index file
+</ParamField>
+
+<ParamField path=".dbf" type="file" required>
+  Attribute database file
+</ParamField>
+
+<ParamField path=".prj" type="file" required>
+  Projection file with coordinate reference system
+</ParamField>
+
+<Warning>
+  The import will fail immediately if any of these four files are missing from the ZIP archive.
+</Warning>
+
+## Required Attributes
+
+### Hierarchy Fields (Mandatory)
+
+The shapefile **must** contain these three fields to link geometries to the forest patrimony hierarchy:
+
+<ParamField path="nivel2" type="string" required>
+  Level 2 code (Finca). Accepted field names: `nivel2`, `nivel_2`, `cod_n2`, `codfinca`, `finca`, `nivel2_id`, `n2`
+</ParamField>
+
+<ParamField path="nivel3" type="string" required>
+  Level 3 code (Lote). Accepted field names: `nivel3`, `nivel_3`, `cod_n3`, `codlote`, `lote`, `nivel3_id`, `n3`
+</ParamField>
+
+<ParamField path="nivel4" type="string" required>
+  Level 4 code (Rodal). Accepted field names: `nivel4`, `nivel_4`, `cod_n4`, `codrodal`, `rodal`, `nivel4_id`, `n4`
+</ParamField>
+
+### Optional Land Use Fields
+
+<ParamField path="currentlandusename" type="string">
+  Current land use name. Must match an active `LandUseType` in the system. Accepted field names: `currentlandusename`, `usoactual`, `uso_actual`, `uso`, `landuse`, `land_use`, `usosueloactual`
+</ParamField>
+
+<ParamField path="previouslandusename" type="string">
+  Previous land use name. Accepted field names: `previouslandusename`, `usoanterior`, `uso_anterior`, `previoususe`, `oldlanduse`, `usosueloanterior`
+</ParamField>
+
+<ParamField path="variationdate" type="date">
+  Date of land use change. Format: ISO 8601 or any parseable date format. Accepted field names: `variationdate`, `fechavariacion`, `fecha_variacion`, `landusechangedate`, `fecha_cambio_uso`
+</ParamField>
+
+<ParamField path="variationnotes" type="string">
+  Notes about the land use change. Accepted field names: `variationnotes`, `observaciones`, `observacion`, `nota`, `notas`, `comentario`, `comentarios`
+</ParamField>
+
+## Geometry Requirements
+
+### Supported Geometry Types
+
+- **Polygon**: Single polygon features
+- **MultiPolygon**: Multiple polygon features
+
+<Warning>
+  Point, LineString, and other geometry types are **not supported** and will be rejected during import.
+</Warning>
+
+### Coordinate Reference System
+
+- All geometries are automatically transformed to **EPSG:4326** (WGS 84)
+- The `.prj` file must contain a valid CRS definition
+- Geometries are stored as `MultiPolygon` in PostGIS with SRID 4326
+
+## Import Process
+
+<Steps>
+  <Step title="Upload ZIP File">
+    Upload the shapefile ZIP through the geo dashboard interface. Optionally provide:
+    - **Variation Date**: Default date for land use changes (if not in shapefile)
+    - **Variation Notes**: Default notes for land use changes (if not in shapefile)
+  </Step>
+
+  <Step title="Job Creation">
+    The system creates a `GeoImportJob` record with status `PENDING` and stores the ZIP file in `/public/uploads/geo-imports/`.
+  </Step>
+
+  <Step title="ZIP Validation">
+    The worker extracts the ZIP and validates that all four required files (`.shp`, `.shx`, `.dbf`, `.prj`) are present.
+    
+    Job status changes to `EXTRACTING` → `VALIDATING`.
+  </Step>
+
+  <Step title="Shapefile Parsing">
+    The worker parses the shapefile using the `shpjs` library and converts it to a GeoJSON `FeatureCollection`.
+  </Step>
+
+  <Step title="Feature Processing">
+    For each feature:
+    
+    1. **Extract hierarchy codes** (nivel2, nivel3, nivel4)
+    2. **Validate hierarchy** exists in database for the user's organization
+    3. **Normalize geometry** to MultiPolygon
+    4. **Validate land use names** against active `LandUseType` records
+    5. **Deactivate old geometry** for this Level 4 unit
+    6. **Insert new geometry** with `ST_GeomFromGeoJSON`
+    7. **Calculate surface area** and centroid using PostGIS
+    8. **Update Level 4 record** with new area, centroid, and land use
+    9. **Create land use variation** record if land use changed
+    
+    Job status: `PROCESSING`
+  </Step>
+
+  <Step title="Sync Land Use Totals">
+    After all features are processed, the system recalculates `LandUseType.surfaceHa` totals by summing all Level 4 areas grouped by land use name.
+  </Step>
+
+  <Step title="Completion">
+    Job status changes to `COMPLETED` or `FAILED`. Import results include:
+    - Total records
+    - Processed records
+    - Failed records
+    - Error messages for failures
+  </Step>
+</Steps>
+
+## Field Mapping Reference
+
+The import worker uses **flexible field matching** (case-insensitive) for attribute names:
+
+```typescript
+const DEFAULT_FIELD_MAP = {
+  level2: ["nivel2", "nivel_2", "cod_n2", "codfinca", "finca", "nivel2_id", "n2"],
+  level3: ["nivel3", "nivel_3", "cod_n3", "codlote", "lote", "nivel3_id", "n3"],
+  level4: ["nivel4", "nivel_4", "cod_n4", "codrodal", "rodal", "nivel4_id", "n4"],
+  currentLandUseName: ["currentlandusename", "usoactual", "uso_actual", "uso", "landuse"],
+  previousLandUseName: ["previouslandusename", "usoanterior", "uso_anterior"],
+  variationDate: ["variationdate", "fechavariacion", "fecha_variacion"],
+  variationNotes: ["variationnotes", "observaciones", "observacion", "nota"]
+};
+```
+
+## Example Shapefile Attributes
+
+```csv
+nivel2,nivel3,nivel4,usoactual,usoanterior,fechavariacion,observaciones
+N2-001,N3-001,N4-001,BOSQUE,NO BOSQUE,2026-03-01,Cambio por actualización masiva GIS
+N2-001,N3-001,N4-002,CONUCO,BOSQUE,2026-02-15,Conversión a uso agrícola
+```
+
+## Land Use Variation Detection
+
+The import automatically creates `LandPatrimonialVariation` records when:
+
+1. The shapefile provides `currentLandUseName` (or defaults exist)
+2. `currentLandUseName` differs from the existing `Level4.currentLandUseName`
+3. Both values are valid land use types in the system
+
+Variation records include:
+- Previous and new land use names
+- Affected area (ha)
+- Variation date (from shapefile or default)
+- Notes (from shapefile or default)
+- Status: `PENDIENTE` (pending valuation)
+- Kind: `INCREMENTO` (if land use changed) or `SIN_CAMBIO` (if same)
+
+## Error Handling
+
+Common import failures and solutions:
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| **ZIP incompleto** | Missing `.shp`, `.shx`, `.dbf`, or `.prj` | Include all four required files |
+| **No se encontraron códigos de jerarquía** | Missing nivel2/nivel3/nivel4 fields | Add hierarchy fields to attribute table |
+| **No existe relación jerárquica válida** | Hierarchy codes don't match database | Create Level 2/3/4 records first or fix codes |
+| **Solo se permiten geometrías Polygon o MultiPolygon** | Point or LineString geometry | Use polygon-only shapefiles |
+| **El uso actual no existe** | Land use name not in `LandUseType` | Add land use type or fix spelling |
+
+## Template Download
+
+Download a CSV or XLSX template with the correct field structure:
+
+```typescript
+fetch('/api/forest/geo/import?format=csv')  // or format=xlsx
+```
+
+The template includes:
+- All required and optional fields
+- Example data
+- Correct field naming conventions
+
+## Security & Multi-Organization
+
+<Warning>
+  The `organizationId` is **never** read from the shapefile. It is always resolved from the authenticated user's organization.
+  
+  All hierarchy validation ensures Level 2/3/4 records belong to the user's organization.
+</Warning>
+
+## API Reference
+
+### Upload Shapefile
+
+```bash
+POST /api/forest/geo/import
+Content-Type: multipart/form-data
+
+file: shapefile.zip
+variationDate: 2026-03-15 (optional)
+variationNotes: Bulk GIS update (optional)
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "jobId": "uuid",
+    "status": "PENDING",
+    "message": "Archivo recibido. El worker procesará la importación en segundo plano."
+  }
+}
+```
+
+### Check Job Status
+
+```bash
+GET /api/forest/geo/import/:jobId
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "status": "COMPLETED",
+    "processedRecords": 150,
+    "failedRecords": 2,
+    "totalRecords": 152,
+    "errorMessage": null
+  }
+}
+```
+
+## Related Documentation
+
+- [Workers](/geo/workers) - Background processing architecture
+- [Map Visualization](/geo/map-visualization) - Viewing imported geometries
+- [Data Hierarchy](/geo/data-hierarchy) - Forest patrimony structure

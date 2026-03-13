@@ -1,0 +1,167 @@
+---
+title: Introduction
+description: Overview of SMyEG - A full-stack modular forest management and geospatial application
+---
+
+# Introduction to SMyEG
+
+SMyEG is a comprehensive full-stack modular application designed for forest patrimony management, biological asset tracking, and geospatial data processing. Built with modern web technologies, it provides a powerful platform for organizations to manage their forest resources, track measurements, and visualize geospatial data.
+
+## What is SMyEG?
+
+SMyEG (Sistema de Monitoreo y Evaluación Geoespacial) is an enterprise-grade application that combines:
+
+- **Forest Patrimony Management**: Organize and track forest assets at multiple hierarchical levels (Nivel 2, 3, and 4)
+- **Geospatial Processing**: Import and process Shapefiles with automatic surface recalculation
+- **Biological Asset Tracking**: Monitor forest biological assets and their measurements over time
+- **Multi-Organization Support**: Secure multi-tenant architecture with organization-level data isolation
+- **Role-Based Access Control**: Granular permissions system with customizable roles
+- **Audit Trail**: Comprehensive activity logging with partitioned storage for performance
+
+## Who is it for?
+
+<CardGroup cols={2}>
+  <Card title="Forest Management Organizations" icon="tree">
+    Organizations managing large forest properties need tools to track their patrimony, biological assets, and geospatial boundaries.
+  </Card>
+  <Card title="Environmental Agencies" icon="leaf">
+    Government and non-profit agencies monitoring forest resources, conservation areas, and environmental compliance.
+  </Card>
+  <Card title="Forestry Consultants" icon="chart-line">
+    Professional consultants requiring a platform to manage multiple client organizations with isolated data.
+  </Card>
+  <Card title="Research Institutions" icon="flask">
+    Academic and research organizations studying forest ecosystems and requiring geospatial data management.
+  </Card>
+</CardGroup>
+
+## Key Capabilities
+
+### Authentication & Authorization
+
+- NextAuth v5 with credential-based authentication
+- Multi-organization login with organization selection
+- Role-based access control (SUPER_ADMIN, ADMIN, MANAGER, USER)
+- Granular permissions (CREATE, READ, UPDATE, DELETE, EXPORT, ADMIN)
+- Account lockout protection after failed login attempts
+- Session management with JWT tokens
+
+### Modular Architecture
+
+SMyEG is built with a modular design, featuring:
+
+- **Dashboard**: Real-time metrics and geospatial visualization
+- **User Management**: Create and manage users with role assignments
+- **Organizations**: Multi-tenant organization management
+- **Forest Patrimony**: Hierarchical forest asset organization
+- **Biological Assets**: Track and measure forest biological assets
+- **Asset Measurements**: Record and analyze asset measurements over time
+- **Audit**: Complete activity tracking and compliance reporting
+- **System Configuration**: Configurable settings at global and organization levels
+
+### Geospatial Features
+
+<Note>
+  All geospatial data is automatically transformed to EPSG:4326 (WGS84) for consistency.
+</Note>
+
+- **Shapefile Import**: Upload ZIP files containing .shp, .shx, .dbf, and .prj files
+- **Automatic Surface Calculation**: Worker-based async processing of geometry calculations
+- **Hierarchical Linking**: Connect Nivel 4 (rodal) geometries to parent Nivel 2 and 3 entities
+- **Validation**: Geometry validation and automatic repair of minor issues
+- **Map Visualization**: Interactive Leaflet-based map interface
+
+### Background Workers
+
+SMyEG includes dedicated worker processes for asynchronous operations:
+
+```typescript
+// Geospatial worker processes import jobs and recalculations
+pnpm worker:geo
+
+// Asset measurement worker handles measurement calculations
+pnpm worker:assets
+```
+
+**Worker Configuration:**
+- `GEO_WORKER_INTERVAL_MS`: Polling interval (default: 4000ms)
+- `GEO_IMPORT_BATCH_SIZE`: Max import jobs per cycle (default: 5)
+- `GEO_RECALC_BATCH_SIZE`: Max recalculation jobs per cycle (default: 10)
+- `GEO_WORKER_RUN_ONCE`: Run one cycle and exit (useful for testing)
+
+## Technology Stack
+
+<CodeGroup>
+```json package.json
+{
+  "dependencies": {
+    "next": "16.1.6",
+    "react": "19.2.3",
+    "@prisma/client": "^5.22.0",
+    "next-auth": "^5.0.0-beta.30",
+    "@tanstack/react-query": "^5.90.21",
+    "@turf/turf": "^7.3.4",
+    "leaflet": "^1.9.4",
+    "react-leaflet": "^5.0.0",
+    "shpjs": "^6.2.0"
+  }
+}
+```
+</CodeGroup>
+
+**Frontend:**
+- Next.js 16 (App Router)
+- React 19
+- Tailwind CSS 4
+- shadcn/ui components
+- Leaflet for maps
+- React Query for data fetching
+
+**Backend:**
+- Next.js API Routes
+- Prisma ORM
+- PostgreSQL 15 (with PostGIS extensions)
+- Redis for caching/queues
+
+**Authentication:**
+- NextAuth v5
+- bcryptjs for password hashing
+- JWT session strategy
+
+**Geospatial:**
+- Turf.js for geometry operations
+- shpjs for Shapefile parsing
+- PostGIS for spatial queries
+
+## Security & Multi-Organization
+
+<Warning>
+  All data is strictly isolated by organization. Users can only access data from organizations they are authorized to access.
+</Warning>
+
+SMyEG implements comprehensive security:
+
+- **Organization Isolation**: All queries are scoped to the user's current organization
+- **Row-Level Security**: Database queries automatically filter by organizationId
+- **Permission Checks**: Every action is validated against user permissions
+- **Audit Logging**: All sensitive actions are logged with user, timestamp, and context
+- **Shapefile Security**: The organizationId is never read from uploaded files - it's always derived from the authenticated user
+
+## Performance Optimizations
+
+- **Database Partitioning**: audit_logs table is partitioned by month for optimal query performance
+- **Async Workers**: Heavy processing (imports, calculations) runs in background workers
+- **Batch Processing**: Workers process jobs in configurable batch sizes
+- **Connection Pooling**: Prisma manages PostgreSQL connection pools efficiently
+- **Query Optimization**: Strategic indexes on foreign keys and commonly filtered columns
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Set up SMyEG on your local machine or server
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get up and running in minutes with our quick start guide
+  </Card>
+</CardGroup>

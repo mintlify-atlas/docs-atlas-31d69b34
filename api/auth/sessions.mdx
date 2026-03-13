@@ -1,0 +1,227 @@
+---
+title: 'Session Management'
+description: 'Retrieve and manage user authentication sessions'
+---
+
+## GET /api/auth/session
+
+Retrieves the current authenticated user's session information. This endpoint is provided by NextAuth.
+
+### Authentication
+
+Requires a valid session cookie (automatically set after successful sign-in).
+
+### Response
+
+#### Authenticated Session (200)
+
+```json
+{
+  "user": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "roles": ["USER", "ADMIN"],
+    "permissions": [
+      "users:read",
+      "users:write",
+      "organizations:read"
+    ],
+    "organizationId": "660e8400-e29b-41d4-a716-446655440001",
+    "organizationName": "Acme Corporation"
+  },
+  "expires": "2026-04-13T12:00:00.000Z"
+}
+```
+
+<ResponseField name="user" type="object">
+  Current user information
+
+  <ResponseField name="user.id" type="string">
+    User UUID
+  </ResponseField>
+
+  <ResponseField name="user.email" type="string">
+    User email address
+  </ResponseField>
+
+  <ResponseField name="user.name" type="string">
+    User display name or full name
+  </ResponseField>
+
+  <ResponseField name="user.roles" type="array">
+    Array of role names assigned to the user in the current organization
+  </ResponseField>
+
+  <ResponseField name="user.permissions" type="array">
+    Array of permission strings granted to the user based on their roles
+  </ResponseField>
+
+  <ResponseField name="user.organizationId" type="string">
+    UUID of the organization the user is currently operating in
+  </ResponseField>
+
+  <ResponseField name="user.organizationName" type="string">
+    Name of the current organization
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="expires" type="string">
+  ISO 8601 timestamp when the session expires
+</ResponseField>
+
+#### No Session (200)
+
+```json
+{}
+```
+
+Returns empty object when no valid session exists.
+
+### Session Strategy
+
+This API uses **JWT-based sessions** with the following characteristics:
+
+- **Storage**: Session data is stored in an encrypted JWT token
+- **Cookie Name**: `next-auth.session-token` (or `__Secure-next-auth.session-token` in production)
+- **HTTP Only**: Session cookies are HTTP-only for security
+- **Secure**: Cookies use Secure flag in production (HTTPS only)
+- **Same Site**: Configured with SameSite policy for CSRF protection
+
+### Session Contents
+
+The JWT token contains:
+
+- User ID and email
+- User roles and permissions (refreshed on each JWT rotation)
+- Current organization context
+- Token expiration timestamp
+
+### Example
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET 'https://api.smyeg.com/api/auth/session' \
+  -H 'Cookie: next-auth.session-token=YOUR_SESSION_COOKIE'
+```
+
+```javascript JavaScript
+// In browser with credentials
+const response = await fetch('https://api.smyeg.com/api/auth/session', {
+  credentials: 'include'
+});
+
+const session = await response.json();
+
+if (session.user) {
+  console.log('Logged in as:', session.user.email);
+  console.log('Roles:', session.user.roles);
+  console.log('Organization:', session.user.organizationName);
+} else {
+  console.log('Not authenticated');
+}
+```
+
+```javascript Next.js Server Component
+import { auth } from '@/lib/auth';
+
+export default async function Page() {
+  const session = await auth();
+  
+  if (!session?.user) {
+    return <div>Not authenticated</div>;
+  }
+  
+  return (
+    <div>
+      <p>Email: {session.user.email}</p>
+      <p>Organization: {session.user.organizationName}</p>
+      <p>Roles: {session.user.roles.join(', ')}</p>
+    </div>
+  );
+}
+```
+
+```python Python
+import requests
+
+session = requests.Session()
+
+# First sign in to get session cookie
+session.post(
+    'https://api.smyeg.com/api/auth/signin',
+    json={'identifier': 'user@example.com', 'password': 'pass', 'organizationId': 'org-id'}
+)
+
+# Then get session
+response = session.get('https://api.smyeg.com/api/auth/session')
+data = response.json()
+
+if 'user' in data:
+    print(f"Logged in as: {data['user']['email']}")
+else:
+    print("Not authenticated")
+```
+
+</CodeGroup>
+
+## POST /api/auth/signout
+
+Signs out the current user by invalidating their session.
+
+### Request
+
+No request body required. Session cookie must be present.
+
+### Response
+
+Redirects to the sign-in page after clearing session cookies.
+
+### Example
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST 'https://api.smyeg.com/api/auth/signout' \
+  -H 'Cookie: next-auth.session-token=YOUR_SESSION_COOKIE'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.smyeg.com/api/auth/signout', {
+  method: 'POST',
+  credentials: 'include'
+});
+
+// User is now signed out
+```
+
+</CodeGroup>
+
+## Session Invalidation
+
+Sessions are automatically invalidated when:
+
+- **User signs out**: Explicit logout via `/api/auth/signout`
+- **Password reset**: All active sessions are revoked when password is reset
+- **JWT expiration**: Token expires based on NextAuth configuration
+- **Manual revocation**: Admin or system can revoke sessions in database
+
+### Session Database Records
+
+While the API uses JWT sessions, the system also tracks sessions in the database for:
+
+- Audit purposes
+- Ability to revoke all sessions (e.g., on password reset)
+- Security monitoring
+
+Session records include:
+- `userId`: Owner of the session
+- `isActive`: Whether session is currently valid
+- `revokedAt`: Timestamp when session was explicitly revoked
+- `createdAt`: When session was created
+
+### Related Endpoints
+
+- [Sign In](/api/auth/login) - Create a new session
+- [Organization Options](/api/auth/organization-options) - Get available organizations for user

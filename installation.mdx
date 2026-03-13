@@ -1,0 +1,459 @@
+---
+title: Installation
+description: Complete installation instructions for SMyEG including dependencies, database setup, and configuration
+---
+
+# Installation
+
+This guide will walk you through setting up SMyEG on your local development environment or production server.
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+<CardGroup cols={2}>
+  <Card title="Node.js 20+" icon="node-js">
+    Download from [nodejs.org](https://nodejs.org/)
+  </Card>
+  <Card title="Docker (Optional)" icon="docker">
+    Recommended for PostgreSQL and Redis. Download from [docker.com](https://www.docker.com/)
+  </Card>
+  <Card title="PostgreSQL 15+" icon="database">
+    Required if not using Docker. Must include PostGIS extension.
+  </Card>
+  <Card title="Redis 7+" icon="server">
+    Required if not using Docker
+  </Card>
+</CardGroup>
+
+<Note>
+  We strongly recommend using Docker for development to simplify PostgreSQL and Redis setup.
+</Note>
+
+## Installation Steps
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the SMyEG repository to your local machine:
+
+    ```bash
+    git clone <repository-url>
+    cd smyeg-app
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install all required Node.js packages using npm:
+
+    ```bash
+    npm install
+    ```
+
+    This will install all dependencies defined in `package.json`, including:
+    - Next.js and React
+    - Prisma ORM
+    - NextAuth for authentication
+    - Leaflet and Turf.js for geospatial features
+    - All UI components and utilities
+  </Step>
+
+  <Step title="Start Database Services">
+    ### Option A: Using Docker (Recommended)
+
+    Start PostgreSQL and Redis using Docker Compose:
+
+    ```bash
+    docker compose up -d
+    ```
+
+    This starts:
+    - **PostgreSQL 15**: Running on port 5432
+    - **Redis 7**: Running on port 6379
+
+    <CodeGroup>
+    ```yaml docker-compose.yml
+    services:
+      postgres:
+        image: postgres:15-alpine
+        environment:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app_dev
+        ports:
+          - "5432:5432"
+        volumes:
+          - pgdata:/var/lib/postgresql/data
+
+      redis:
+        image: redis:7-alpine
+        command: redis-server --appendonly yes
+        ports:
+          - "6379:6379"
+        volumes:
+          - redisdata:/data
+    ```
+    </CodeGroup>
+
+    Verify services are running:
+
+    ```bash
+    docker compose ps
+    ```
+
+    ### Option B: Manual Installation
+
+    If you prefer not to use Docker:
+
+    1. Install and start PostgreSQL 15+
+    2. Create a database named `app_dev`
+    3. Ensure the PostGIS extension is available
+    4. Install and start Redis 7+
+  </Step>
+
+  <Step title="Configure Environment Variables">
+    Create a `.env` file in the root directory with the following variables:
+
+    ```bash .env
+    # Database
+    DATABASE_URL="postgresql://postgres:postgres@localhost:5432/app_dev?schema=public"
+
+    # Authentication
+    AUTH_SECRET="your-secret-key-here-generate-with-openssl-rand-base64-32"
+    NEXTAUTH_URL="http://localhost:3000"
+
+    # Node Environment
+    NODE_ENV="development"
+
+    # Optional: Geospatial Worker Configuration
+    GEO_WORKER_INTERVAL_MS=4000
+    GEO_IMPORT_BATCH_SIZE=5
+    GEO_RECALC_BATCH_SIZE=10
+
+    # Optional: Asset Measurement Worker Configuration
+    ASSET_MEASUREMENT_WORKER_RUN_ONCE=false
+    ```
+
+    <Warning>
+      **Security**: Generate a strong random secret for `AUTH_SECRET`. Never commit this file to version control.
+    </Warning>
+
+    Generate a secure secret:
+
+    ```bash
+    openssl rand -base64 32
+    ```
+
+    <Note>
+      If you changed the PostgreSQL credentials in docker-compose.yml, update the DATABASE_URL accordingly.
+    </Note>
+  </Step>
+
+  <Step title="Generate Prisma Client">
+    Generate the Prisma Client based on your schema:
+
+    ```bash
+    npm run db:generate
+    ```
+
+    This reads `prisma/schema.prisma` and generates type-safe database client code in `node_modules/@prisma/client`.
+  </Step>
+
+  <Step title="Run Database Migrations">
+    Apply all database migrations to create the schema:
+
+    ```bash
+    npm run db:migrate
+    ```
+
+    This creates all tables, indexes, and constraints defined in the Prisma migrations, including:
+    - User and authentication tables
+    - Organization and role tables
+    - Forest patrimony tables (Nivel 2, 3, 4)
+    - Biological asset tables
+    - Audit log tables (with monthly partitioning)
+    - PostGIS extensions and spatial indexes
+
+    <Note>
+      The first migration includes setup for PostgreSQL extensions (uuid-ossp, pg_trgm, btree_gin) and creates the initial monthly partition for audit_logs.
+    </Note>
+  </Step>
+
+  <Step title="Seed the Database">
+    Load initial data including the default admin user and base configuration:
+
+    ```bash
+    npm run db:seed
+    ```
+
+    This seed script creates:
+
+    **Default Organization:**
+    - Name: "Default Organization"
+    - Slug: "default-org"
+
+    **System Modules:**
+    - Authentication, Users, Dashboard, Organizations
+    - Forest Patrimony, Biological Assets, Asset Measurements
+    - Configuration, Settings, Audit, Analytics
+
+    **Roles:**
+    - SUPER_ADMIN (full permissions)
+    - ADMIN
+    - MANAGER
+    - USER
+
+    **Permissions:**
+    - CREATE, READ, UPDATE, DELETE, EXPORT, ADMIN
+    - Generated for each module
+
+    **Admin User:**
+    - Email: `admin@example.com`
+    - Password: `Admin1234`
+    - Role: SUPER_ADMIN
+
+    <CodeGroup>
+    ```typescript prisma/seed.ts
+    const adminPasswordHash = await bcrypt.hash("Admin1234", 12);
+    const superAdmin = await prisma.user.upsert({
+      where: { email: "admin@example.com" },
+      update: {
+        status: "ACTIVE",
+        passwordHash: adminPasswordHash,
+        organizationId: organization.id,
+      },
+      create: {
+        organizationId: organization.id,
+        email: "admin@example.com",
+        firstName: "System",
+        lastName: "Admin",
+        displayName: "System Admin",
+        status: "ACTIVE",
+        emailVerifiedAt: new Date(),
+        passwordHash: adminPasswordHash,
+      },
+    });
+    ```
+    </CodeGroup>
+
+    <Warning>
+      **Important**: Change the default admin password immediately after your first login in production environments.
+    </Warning>
+  </Step>
+
+  <Step title="Start the Development Server">
+    Launch the Next.js development server:
+
+    ```bash
+    npm run dev
+    ```
+
+    The application will be available at:
+    - **Web Interface**: [http://localhost:3000](http://localhost:3000)
+
+    You should see output similar to:
+
+    ```bash
+    ▲ Next.js 16.1.6
+    - Local:        http://localhost:3000
+    - Network:      http://192.168.1.100:3000
+
+    ✓ Ready in 2.3s
+    ```
+  </Step>
+
+  <Step title="Start Background Workers (Optional)">
+    For full functionality, start the background worker processes in separate terminal windows:
+
+    **Geospatial Worker** (processes Shapefile imports and surface calculations):
+
+    ```bash
+    npm run worker:geo
+    ```
+
+    **Asset Measurement Worker** (processes asset measurements):
+
+    ```bash
+    npm run worker:assets
+    ```
+
+    <Note>
+      Workers are optional for basic usage but required for:
+      - Shapefile imports to be processed
+      - Automatic surface recalculations
+      - Asset measurement processing
+    </Note>
+
+    For testing, you can run workers once and exit:
+
+    ```bash
+    npm run worker:geo:once
+    npm run worker:assets:once
+    ```
+  </Step>
+</Steps>
+
+## Production Deployment
+
+### Building for Production
+
+Build the optimized production bundle:
+
+```bash
+npm run build
+```
+
+Start the production server:
+
+```bash
+npm start
+```
+
+### Using PM2 (Windows/Linux)
+
+<Note>
+  PM2 is a production process manager that keeps your application running and can automatically restart it on crashes.
+</Note>
+
+<Steps>
+  <Step title="Install PM2 Globally">
+    ```bash
+    npm install -g pm2
+    ```
+  </Step>
+
+  <Step title="Build the Application">
+    ```bash
+    npm run build
+    ```
+  </Step>
+
+  <Step title="Start with PM2">
+    The application includes an `ecosystem.config.cjs` file for PM2:
+
+    ```bash
+    pm2 start ecosystem.config.cjs
+    ```
+
+    This starts:
+    - `confor-web`: The Next.js application
+    - `confor-geo-worker`: The geospatial worker
+  </Step>
+
+  <Step title="Monitor Processes">
+    ```bash
+    # Check status
+    pm2 status
+
+    # View logs
+    pm2 logs confor-web
+    pm2 logs confor-geo-worker
+
+    # Restart services
+    pm2 restart confor-web
+    pm2 restart confor-geo-worker
+    ```
+  </Step>
+
+  <Step title="Save Configuration">
+    Persist PM2 configuration for automatic startup:
+
+    ```bash
+    pm2 save
+    pm2 startup
+    ```
+
+    Follow the instructions provided by PM2 to enable startup on boot.
+  </Step>
+</Steps>
+
+## Database Maintenance
+
+### Creating Audit Log Partitions
+
+The audit_logs table uses monthly partitioning for performance. Create the next month's partition:
+
+```bash
+npm run tsx scripts/create-audit-partition.ts
+```
+
+<Note>
+  Consider setting up a monthly cron job to automatically create new partitions.
+</Note>
+
+### Common Database Commands
+
+```bash
+# Generate Prisma client after schema changes
+npm run db:generate
+
+# Create and apply a new migration
+npm run db:migrate
+
+# Push schema changes without migration (dev only)
+npm run db:push
+
+# Re-run seed script
+npm run db:seed
+
+# Sync module definitions
+npm run db:sync-modules
+```
+
+## Troubleshooting
+
+### Database Connection Issues
+
+<AccordionGroup>
+  <Accordion title="Cannot connect to PostgreSQL">
+    1. Verify Docker containers are running: `docker compose ps`
+    2. Check DATABASE_URL in .env matches your setup
+    3. Ensure PostgreSQL port 5432 is not blocked by firewall
+    4. Try connecting manually: `psql -h localhost -U postgres -d app_dev`
+  </Accordion>
+
+  <Accordion title="Migration fails with 'database does not exist'">
+    1. Create the database manually:
+       ```bash
+       docker compose exec postgres psql -U postgres -c "CREATE DATABASE app_dev;"
+       ```
+    2. Run migrations again: `npm run db:migrate`
+  </Accordion>
+
+  <Accordion title="PostGIS extension not available">
+    The migrations automatically create required extensions. If you see errors:
+    1. Connect to your database
+    2. Run: `CREATE EXTENSION IF NOT EXISTS postgis;`
+    3. Retry the migration
+  </Accordion>
+</AccordionGroup>
+
+### Application Issues
+
+<AccordionGroup>
+  <Accordion title="Application won't start">
+    1. Check that dependencies are installed: `npm install`
+    2. Verify Node.js version is 20 or higher: `node --version`
+    3. Ensure .env file exists with required variables
+    4. Check for port conflicts on 3000
+  </Accordion>
+
+  <Accordion title="Cannot login with admin credentials">
+    1. Verify the seed script completed successfully
+    2. Check database for admin user:
+       ```bash
+       docker compose exec postgres psql -U postgres -d app_dev -c "SELECT email, status FROM users WHERE email = 'admin@example.com';"
+       ```
+    3. Re-run seed if needed: `npm run db:seed`
+  </Accordion>
+
+  <Accordion title="Workers not processing jobs">
+    1. Ensure workers are running in separate terminal windows
+    2. Check worker logs for errors
+    3. Verify Redis is running and accessible
+    4. Check worker environment variables in .env
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+Now that you have SMyEG installed, continue to the [Quick Start](/quickstart) guide to log in and explore the application.

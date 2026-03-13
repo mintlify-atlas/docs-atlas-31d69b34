@@ -1,0 +1,503 @@
+---
+title: 'Docker Deployment'
+description: 'Docker Compose setup for PostgreSQL and Redis in SMyEG development environment'
+---
+
+## Overview
+
+SMyEG provides a Docker Compose configuration for running **PostgreSQL** and **Redis** as containerized services. This setup is ideal for development and can be adapted for staging environments.
+
+<Note>
+  The Docker Compose configuration does **not** include the Next.js application itself. It only provides the required infrastructure services.
+</Note>
+
+## Prerequisites
+
+- Docker Engine **20.10+**
+- Docker Compose **2.0+** (or `docker-compose` v1.29+)
+
+### Installation
+
+<CodeGroup>
+```bash macOS (Homebrew)
+brew install docker docker-compose
+```
+
+```bash Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install docker.io docker-compose
+sudo systemctl enable --now docker
+```
+
+```bash Windows
+# Download Docker Desktop from:
+# https://www.docker.com/products/docker-desktop
+```
+</CodeGroup>
+
+## Docker Compose Configuration
+
+### File Structure
+
+The `docker-compose.yml` file in the project root defines two services:
+
+```yaml docker-compose.yml
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+volumes:
+  pgdata:
+  redisdata:
+```
+
+## Services
+
+### PostgreSQL Service
+
+<ParamField path="Image" type="string">
+  **postgres:15-alpine** - Lightweight PostgreSQL 15 on Alpine Linux
+</ParamField>
+
+<ParamField path="Port" type="number">
+  **5432** - Exposed on host for local connections
+</ParamField>
+
+<ParamField path="Default Database" type="string">
+  **app_dev** - Created automatically on first start
+</ParamField>
+
+<ParamField path="Credentials" type="object">
+  - **User:** `postgres`
+  - **Password:** `postgres`
+  
+  <Warning>
+    Change these credentials for production deployments.
+  </Warning>
+</ParamField>
+
+<ParamField path="Data Volume" type="string">
+  **pgdata** - Persists database data across container restarts
+</ParamField>
+
+### Redis Service
+
+<ParamField path="Image" type="string">
+  **redis:7-alpine** - Latest Redis 7 on Alpine Linux
+</ParamField>
+
+<ParamField path="Port" type="number">
+  **6379** - Exposed on host for local connections
+</ParamField>
+
+<ParamField path="Persistence" type="string">
+  **AOF (Append Only File)** - Enabled with `--appendonly yes` for durability
+</ParamField>
+
+<ParamField path="Data Volume" type="string">
+  **redisdata** - Persists Redis data across container restarts
+</ParamField>
+
+## Usage
+
+### Starting Services
+
+<Steps>
+  <Step title="Start All Services">
+    Launch both PostgreSQL and Redis in detached mode:
+    ```bash
+    docker compose up -d
+    ```
+    
+    Output:
+    ```
+    [+] Running 3/3
+     ✔ Network smyeg_default    Created
+     ✔ Container smyeg-postgres-1  Started
+     ✔ Container smyeg-redis-1     Started
+    ```
+  </Step>
+  
+  <Step title="Verify Services">
+    Check that services are running:
+    ```bash
+    docker compose ps
+    ```
+    
+    Expected output:
+    ```
+    NAME                 IMAGE               STATUS         PORTS
+    smyeg-postgres-1     postgres:15-alpine  Up 30 seconds  0.0.0.0:5432->5432/tcp
+    smyeg-redis-1        redis:7-alpine      Up 30 seconds  0.0.0.0:6379->6379/tcp
+    ```
+  </Step>
+  
+  <Step title="Configure Application">
+    Update your `.env` file to connect to the services:
+    ```bash
+    DATABASE_URL="postgresql://postgres:postgres@localhost:5432/app_dev?schema=public"
+    REDIS_URL="redis://localhost:6379"
+    ```
+  </Step>
+</Steps>
+
+### Managing Services
+
+<CodeGroup>
+```bash Stop Services
+# Stop without removing containers
+docker compose stop
+```
+
+```bash Start Stopped Services
+# Start previously stopped containers
+docker compose start
+```
+
+```bash Restart Services
+# Restart all services
+docker compose restart
+
+# Restart specific service
+docker compose restart postgres
+```
+
+```bash Stop and Remove
+# Stop and remove containers (data persists)
+docker compose down
+```
+
+```bash Complete Cleanup
+# Stop, remove containers AND delete volumes
+docker compose down -v
+
+# WARNING: This deletes all database data!
+```
+</CodeGroup>
+
+### Viewing Logs
+
+<CodeGroup>
+```bash All Services
+# Follow logs from all services
+docker compose logs -f
+```
+
+```bash PostgreSQL Only
+# View PostgreSQL logs
+docker compose logs -f postgres
+
+# Last 100 lines
+docker compose logs --tail=100 postgres
+```
+
+```bash Redis Only
+# View Redis logs
+docker compose logs -f redis
+```
+</CodeGroup>
+
+## Accessing Services
+
+### PostgreSQL
+
+<Steps>
+  <Step title="Using psql CLI">
+    Connect via command line:
+    ```bash
+    psql postgresql://postgres:postgres@localhost:5432/app_dev
+    ```
+  </Step>
+  
+  <Step title="Using Docker Exec">
+    Access psql inside the container:
+    ```bash
+    docker compose exec postgres psql -U postgres -d app_dev
+    ```
+  </Step>
+  
+  <Step title="Using GUI Tools">
+    Configure your database client:
+    - **Host:** `localhost`
+    - **Port:** `5432`
+    - **Database:** `app_dev`
+    - **Username:** `postgres`
+    - **Password:** `postgres`
+    
+    Recommended tools:
+    - pgAdmin
+    - DBeaver
+    - DataGrip
+    - Postico (macOS)
+  </Step>
+</Steps>
+
+### Redis
+
+<Steps>
+  <Step title="Using redis-cli">
+    Connect via command line:
+    ```bash
+    redis-cli -h localhost -p 6379
+    ```
+  </Step>
+  
+  <Step title="Using Docker Exec">
+    Access redis-cli inside the container:
+    ```bash
+    docker compose exec redis redis-cli
+    ```
+  </Step>
+  
+  <Step title="Test Connection">
+    Verify Redis is working:
+    ```bash
+    docker compose exec redis redis-cli ping
+    # Output: PONG
+    ```
+  </Step>
+</Steps>
+
+## Data Persistence
+
+### Docker Volumes
+
+Data is persisted in named Docker volumes:
+
+```bash
+# List volumes
+docker volume ls | grep -E "pgdata|redisdata"
+
+# Inspect volume
+docker volume inspect <project>_pgdata
+
+# Remove volumes (DANGER: deletes all data)
+docker volume rm <project>_pgdata <project>_redisdata
+```
+
+### Backup and Restore
+
+<CodeGroup>
+```bash Backup PostgreSQL
+# Create backup file
+docker compose exec -T postgres pg_dump -U postgres app_dev > backup.sql
+
+# Create compressed backup
+docker compose exec -T postgres pg_dump -U postgres app_dev | gzip > backup.sql.gz
+```
+
+```bash Restore PostgreSQL
+# Restore from backup
+docker compose exec -T postgres psql -U postgres app_dev < backup.sql
+
+# Restore from compressed backup
+gunzip -c backup.sql.gz | docker compose exec -T postgres psql -U postgres app_dev
+```
+
+```bash Backup Redis
+# Trigger save and copy RDB file
+docker compose exec redis redis-cli BGSAVE
+docker compose cp redis:/data/dump.rdb ./redis_backup.rdb
+```
+
+```bash Restore Redis
+# Copy RDB file and restart
+docker compose cp ./redis_backup.rdb redis:/data/dump.rdb
+docker compose restart redis
+```
+</CodeGroup>
+
+## Customization
+
+### PostgreSQL Extensions
+
+To enable additional PostgreSQL extensions:
+
+```yaml docker-compose.yml
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+```
+
+Create `init-scripts/init.sql`:
+
+```sql init-scripts/init.sql
+CREATE EXTENSION IF NOT EXISTS "postgis";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+```
+
+### Change Default Ports
+
+If ports 5432 or 6379 are already in use:
+
+```yaml docker-compose.yml
+services:
+  postgres:
+    ports:
+      - "5433:5432"  # Host port 5433 -> Container port 5432
+  
+  redis:
+    ports:
+      - "6380:6379"  # Host port 6380 -> Container port 6379
+```
+
+Update your `.env`:
+
+```bash
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/app_dev?schema=public"
+REDIS_URL="redis://localhost:6380"
+```
+
+### Production Configuration
+
+For production, enhance security and performance:
+
+```yaml docker-compose.prod.yml
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "127.0.0.1:5432:5432"  # Bind to localhost only
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "shared_buffers=256MB"
+  
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+```
+
+## Monitoring
+
+### Resource Usage
+
+```bash
+# View real-time stats
+docker stats
+
+# Specific services
+docker stats smyeg-postgres-1 smyeg-redis-1
+```
+
+### Health Checks
+
+Add health checks to your compose file:
+
+```yaml docker-compose.yml
+services:
+  postgres:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
+  redis:
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+```
+
+Check health status:
+
+```bash
+docker compose ps
+```
+
+## Troubleshooting
+
+### Port Already in Use
+
+```bash
+# Find process using port 5432
+lsof -i :5432
+
+# Kill process or change Docker port mapping
+```
+
+### Container Won't Start
+
+```bash
+# View detailed logs
+docker compose logs postgres
+
+# Check container status
+docker compose ps -a
+
+# Remove and recreate
+docker compose down
+docker compose up -d
+```
+
+### Data Corruption
+
+```bash
+# Stop services
+docker compose down
+
+# Remove volumes (WARNING: deletes all data)
+docker volume rm <project>_pgdata
+
+# Restart and restore from backup
+docker compose up -d
+docker compose exec -T postgres psql -U postgres app_dev < backup.sql
+```
+
+### Performance Issues
+
+```bash
+# Check resource usage
+docker stats
+
+# Increase memory limits
+docker compose up -d --scale postgres=1 --memory=2g
+
+# Optimize PostgreSQL config
+docker compose exec postgres psql -U postgres -c "SHOW shared_buffers;"
+```

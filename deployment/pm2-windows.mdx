@@ -1,0 +1,603 @@
+---
+title: 'PM2 Deployment on Windows'
+description: 'Deploy and manage SMyEG application and workers with PM2 on Windows Server'
+---
+
+## Overview
+
+PM2 is a production process manager for Node.js applications. On Windows, PM2 can manage the Next.js web application and background workers (geo worker, asset measurement worker) as persistent services that automatically restart on failure or system reboot.
+
+<Note>
+  This guide assumes you have PostgreSQL and Redis running separately (either locally or remotely). PM2 manages only the Node.js processes.
+</Note>
+
+## Prerequisites
+
+- **Windows 10** or **Windows Server 2016+**
+- **Node.js 20+** installed
+- **pnpm** or **npm** package manager
+- PostgreSQL and Redis accessible (local or remote)
+- Application built for production
+
+## Installation
+
+<Steps>
+  <Step title="Install PM2 Globally">
+    Open PowerShell or Command Prompt as Administrator:
+    ```bash
+    npm install -g pm2
+    ```
+    
+    Verify installation:
+    ```bash
+    pm2 --version
+    ```
+  </Step>
+  
+  <Step title="Install Dependencies">
+    Navigate to your project directory and install dependencies:
+    ```bash
+    cd C:\path\to\smyeg
+    pnpm install
+    ```
+  </Step>
+  
+  <Step title="Configure Environment">
+    Create a `.env` file with production settings:
+    ```bash
+    DATABASE_URL="postgresql://user:pass@localhost:5432/smyeg_prod"
+    NEXTAUTH_URL="https://yourdomain.com"
+    NEXTAUTH_SECRET="your-production-secret"
+    NODE_ENV="production"
+    
+    GEO_WORKER_INTERVAL_MS="5000"
+    GEO_IMPORT_BATCH_SIZE="500"
+    GEO_RECALC_BATCH_SIZE="200"
+    ```
+  </Step>
+  
+  <Step title="Build Application">
+    Build the Next.js application:
+    ```bash
+    pnpm build
+    ```
+    
+    This creates optimized production builds in `.next/`
+  </Step>
+</Steps>
+
+## Ecosystem Configuration
+
+### Configuration File
+
+SMyEG includes `ecosystem.config.cjs` with two process definitions:
+
+```javascript ecosystem.config.cjs
+module.exports = {
+  apps: [
+    {
+      name: "confor-web",
+      cwd: ".",
+      script: "cmd",
+      args: "/c pnpm start",
+      env: {
+        NODE_ENV: "production",
+      },
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 3000,
+    },
+    {
+      name: "confor-geo-worker",
+      cwd: ".",
+      script: "cmd",
+      args: "/c pnpm worker:geo",
+      env: {
+        NODE_ENV: "production",
+        GEO_WORKER_INTERVAL_MS: "5000",
+        GEO_IMPORT_BATCH_SIZE: "500",
+        GEO_RECALC_BATCH_SIZE: "200",
+      },
+      autorestart: true,
+      max_restarts: 20,
+      restart_delay: 3000,
+    },
+  ],
+};
+```
+
+### Process Definitions
+
+<AccordionGroup>
+  <Accordion title="confor-web (Next.js Application)">
+    <ParamField path="name" type="string">
+      Process identifier: `confor-web`
+    </ParamField>
+    
+    <ParamField path="script" type="string">
+      Uses Windows `cmd` to execute `pnpm start`
+    </ParamField>
+    
+    <ParamField path="env" type="object">
+      - **NODE_ENV:** production
+    </ParamField>
+    
+    <ParamField path="autorestart" type="boolean">
+      Automatically restart on crash: `true`
+    </ParamField>
+    
+    <ParamField path="max_restarts" type="number">
+      Maximum restart attempts: `10`
+    </ParamField>
+    
+    <ParamField path="restart_delay" type="number">
+      Wait 3000ms (3 seconds) between restarts
+    </ParamField>
+  </Accordion>
+  
+  <Accordion title="confor-geo-worker (Geospatial Worker)">
+    <ParamField path="name" type="string">
+      Process identifier: `confor-geo-worker`
+    </ParamField>
+    
+    <ParamField path="script" type="string">
+      Uses Windows `cmd` to execute `pnpm worker:geo`
+    </ParamField>
+    
+    <ParamField path="env" type="object">
+      - **NODE_ENV:** production
+      - **GEO_WORKER_INTERVAL_MS:** 5000 (5 second polling)
+      - **GEO_IMPORT_BATCH_SIZE:** 500 imports per cycle
+      - **GEO_RECALC_BATCH_SIZE:** 200 recalculations per cycle
+    </ParamField>
+    
+    <ParamField path="autorestart" type="boolean">
+      Automatically restart on crash: `true`
+    </ParamField>
+    
+    <ParamField path="max_restarts" type="number">
+      Maximum restart attempts: `20`
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+### Customizing Configuration
+
+To modify process settings, edit `ecosystem.config.cjs`:
+
+```javascript ecosystem.config.cjs
+module.exports = {
+  apps: [
+    {
+      name: "confor-web",
+      cwd: ".",
+      script: "cmd",
+      args: "/c pnpm start",
+      env: {
+        NODE_ENV: "production",
+        PORT: "3000",  // Custom port
+      },
+      instances: 1,  // Number of instances (clustering)
+      exec_mode: "cluster",  // Cluster mode for load balancing
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 3000,
+      log_date_format: "YYYY-MM-DD HH:mm:ss Z",
+      error_file: "logs/web-error.log",
+      out_file: "logs/web-out.log",
+    },
+    // ... worker config
+  ],
+};
+```
+
+## Starting Processes
+
+<Steps>
+  <Step title="Start All Processes">
+    Launch all processes defined in ecosystem config:
+    ```bash
+    pm2 start ecosystem.config.cjs
+    ```
+    
+    Output:
+    ```
+    [PM2] Spawning PM2 daemon with pm2_home=C:\Users\.../.pm2
+    [PM2] PM2 Successfully daemonized
+    [PM2] Starting C:\...\ecosystem.config.cjs in cluster_mode
+    [PM2] Done.
+    ┌─────┬──────────────────────┬─────────┬─────────┬───────┐
+    │ id  │ name                 │ status  │ restart │ memory│
+    ├─────┼──────────────────────┼─────────┼─────────┼───────┤
+    │ 0   │ confor-web           │ online  │ 0       │ 150MB │
+    │ 1   │ confor-geo-worker    │ online  │ 0       │ 80MB  │
+    └─────┴──────────────────────┴─────────┴─────────┴───────┘
+    ```
+  </Step>
+  
+  <Step title="Verify Status">
+    Check that processes are running:
+    ```bash
+    pm2 status
+    ```
+    
+    Or use detailed monitoring:
+    ```bash
+    pm2 monit
+    ```
+  </Step>
+  
+  <Step title="Save Process List">
+    Save the current process list for automatic startup:
+    ```bash
+    pm2 save
+    ```
+    
+    Output:
+    ```
+    [PM2] Saving current process list...
+    [PM2] Successfully saved in C:\Users\.../.pm2/dump.pm2
+    ```
+  </Step>
+  
+  <Step title="Enable Auto-Startup">
+    Configure PM2 to start on Windows boot:
+    ```bash
+    pm2 startup
+    ```
+    
+    Follow the instructions shown. You may need to run a command as Administrator.
+  </Step>
+</Steps>
+
+## Managing Processes
+
+### Basic Commands
+
+<CodeGroup>
+```bash View Status
+# List all processes
+pm2 status
+
+# Or use alias
+pm2 ls
+```
+
+```bash Restart Processes
+# Restart specific process
+pm2 restart confor-web
+pm2 restart confor-geo-worker
+
+# Restart all
+pm2 restart all
+```
+
+```bash Stop Processes
+# Stop specific process
+pm2 stop confor-web
+
+# Stop all
+pm2 stop all
+```
+
+```bash Delete Processes
+# Remove specific process from PM2
+pm2 delete confor-web
+
+# Remove all
+pm2 delete all
+```
+
+```bash Reload (Zero-Downtime)
+# Reload with zero downtime (cluster mode only)
+pm2 reload confor-web
+```
+</CodeGroup>
+
+### Viewing Logs
+
+<CodeGroup>
+```bash All Logs
+# Stream all logs in real-time
+pm2 logs
+```
+
+```bash Specific Process
+# View web application logs
+pm2 logs confor-web
+
+# View worker logs
+pm2 logs confor-geo-worker
+```
+
+```bash Last N Lines
+# Show last 100 lines
+pm2 logs --lines 100
+
+# Show last 50 lines of specific process
+pm2 logs confor-web --lines 50
+```
+
+```bash Error Logs Only
+# View only error logs
+pm2 logs --err
+```
+
+```bash Clear Logs
+# Clear all logs
+pm2 flush
+```
+</CodeGroup>
+
+### Monitoring
+
+<CodeGroup>
+```bash Real-Time Monitor
+# Interactive monitoring dashboard
+pm2 monit
+```
+
+```bash Process Details
+# Detailed info about specific process
+pm2 show confor-web
+
+# Or use 'describe'
+pm2 describe confor-web
+```
+
+```bash Resource Usage
+# CPU and memory usage
+pm2 status
+```
+</CodeGroup>
+
+## Advanced Configuration
+
+### Environment-Specific Configs
+
+Create separate configs for staging and production:
+
+<CodeGroup>
+```javascript ecosystem.staging.config.cjs
+module.exports = {
+  apps: [
+    {
+      name: "confor-web-staging",
+      script: "cmd",
+      args: "/c pnpm start",
+      env: {
+        NODE_ENV: "staging",
+        PORT: "3001",
+      },
+    },
+  ],
+};
+```
+
+```javascript ecosystem.prod.config.cjs
+module.exports = {
+  apps: [
+    {
+      name: "confor-web-prod",
+      script: "cmd",
+      args: "/c pnpm start",
+      env: {
+        NODE_ENV: "production",
+        PORT: "3000",
+      },
+      instances: 2,  // Run 2 instances for load balancing
+      exec_mode: "cluster",
+    },
+  ],
+};
+```
+</CodeGroup>
+
+Start specific config:
+
+```bash
+pm2 start ecosystem.prod.config.cjs
+```
+
+### Log Rotation
+
+Install PM2 log rotation module:
+
+```bash
+pm2 install pm2-logrotate
+
+# Configure rotation
+pm2 set pm2-logrotate:max_size 10M
+pm2 set pm2-logrotate:retain 30
+pm2 set pm2-logrotate:compress true
+```
+
+### Process Clustering
+
+For better performance, run multiple instances:
+
+```javascript ecosystem.config.cjs
+{
+  name: "confor-web",
+  script: "cmd",
+  args: "/c pnpm start",
+  instances: 2,  // Or use -1 for CPU count
+  exec_mode: "cluster",
+  autorestart: true,
+}
+```
+
+<Warning>
+  Clustering requires your application to be stateless. Session data should be stored in Redis or a database, not in-memory.
+</Warning>
+
+## Windows Service Integration
+
+### Auto-Start on Boot
+
+<Steps>
+  <Step title="Generate Startup Script">
+    Run as Administrator:
+    ```bash
+    pm2 startup
+    ```
+  </Step>
+  
+  <Step title="Execute Generated Command">
+    PM2 will output a command to run. Execute it as Administrator:
+    ```bash
+    pm2-startup install
+    ```
+  </Step>
+  
+  <Step title="Save Process List">
+    ```bash
+    pm2 save
+    ```
+  </Step>
+  
+  <Step title="Test Reboot">
+    Restart your Windows server and verify processes auto-start:
+    ```bash
+    pm2 status
+    ```
+  </Step>
+</Steps>
+
+### Disable Auto-Start
+
+```bash
+pm2 unstartup
+pm2 startup uninstall
+```
+
+## Troubleshooting
+
+### Process Crashes Immediately
+
+```bash
+# Check error logs
+pm2 logs confor-web --err
+
+# Verify build completed
+dir .next
+
+# Test manual start
+pnpm start
+```
+
+### Worker Not Processing Jobs
+
+```bash
+# Check worker logs
+pm2 logs confor-geo-worker
+
+# Verify environment variables
+pm2 show confor-geo-worker
+
+# Check database connectivity
+pm2 logs confor-geo-worker --lines 200
+```
+
+### High Memory Usage
+
+```bash
+# Monitor memory
+pm2 monit
+
+# Restart to clear memory
+pm2 restart confor-web
+
+# Set memory limit
+pm2 start ecosystem.config.cjs --max-memory-restart 500M
+```
+
+### PM2 Daemon Not Starting
+
+```bash
+# Kill PM2 daemon
+pm2 kill
+
+# Restart PM2
+pm2 resurrect
+```
+
+### Can't Access Application
+
+```bash
+# Check if process is listening
+netstat -ano | findstr :3000
+
+# Verify firewall rules
+# Open Windows Firewall settings and allow port 3000
+
+# Check logs for errors
+pm2 logs confor-web
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Regular Restarts" icon="rotate">
+    Schedule periodic restarts to clear memory leaks:
+    ```bash
+    pm2 restart confor-web --cron "0 3 * * *"
+    ```
+  </Card>
+  
+  <Card title="Monitor Logs" icon="file-lines">
+    Regularly check logs for errors:
+    ```bash
+    pm2 logs --lines 1000 > review.log
+    ```
+  </Card>
+  
+  <Card title="Save Configuration" icon="floppy-disk">
+    Always save after changes:
+    ```bash
+    pm2 save
+    ```
+  </Card>
+  
+  <Card title="Test Before Deploy" icon="vial">
+    Test ecosystem config locally:
+    ```bash
+    pm2 start ecosystem.config.cjs
+    pm2 logs
+    ```
+  </Card>
+</CardGroup>
+
+## Additional Workers
+
+To add the asset measurement worker, edit `ecosystem.config.cjs`:
+
+```javascript ecosystem.config.cjs
+module.exports = {
+  apps: [
+    // ... existing apps
+    {
+      name: "confor-asset-worker",
+      cwd: ".",
+      script: "cmd",
+      args: "/c pnpm worker:assets",
+      env: {
+        NODE_ENV: "production",
+        ASSET_MEASUREMENT_WORKER_INTERVAL_MS: "5000",
+        ASSET_MEASUREMENT_WORKER_BATCH_SIZE: "10",
+      },
+      autorestart: true,
+      max_restarts: 20,
+      restart_delay: 3000,
+    },
+  ],
+};
+```
+
+Then restart PM2:
+
+```bash
+pm2 delete all
+pm2 start ecosystem.config.cjs
+pm2 save
+```

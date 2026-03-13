@@ -1,0 +1,349 @@
+---
+title: Forest Patrimony Hierarchy
+description: Hierarchical forest patrimony management system with 5 levels for organizing land units
+---
+
+# Forest Patrimony Hierarchy
+
+The Forest Patrimony module provides a comprehensive 5-level hierarchical system for organizing and managing forest land units, from large estates down to individual plots.
+
+## Hierarchy Overview
+
+The system organizes land units in a hierarchical structure:
+
+```
+Level 2 (FINCA, PREDIO, HATO, etc.)
+  └─ Level 3 (LOTE, BLOQUE, SECCION, etc.)
+      └─ Level 4 (RODAL, PARCELA, etc.)
+          └─ Level 5 (SUBUNIDAD, SUBPARCELA, etc.)
+```
+
+## Level 2: Top-Level Property Units
+
+Level 2 represents the largest organizational unit - entire properties, estates, or protected areas.
+
+### Level 2 Types
+
+The system supports the following Level 2 types defined in the `PatrimonyLevel2Type` enum:
+
+- **FINCA** - Farm or rural estate
+- **PREDIO** - Property or land parcel
+- **HATO** - Ranch or cattle estate
+- **FUNDO** - Foundation or estate property
+- **HACIENDA** - Large estate or plantation
+- **ABRAE** - Protected natural area (Área Bajo Régimen de Administración Especial)
+
+### Legal Status
+
+Each Level 2 unit has a legal status (`LegalStatus` enum):
+
+- **ADQUISICION** - Acquisition
+- **ARRIENDO** - Lease
+- **USUFRUCTO** - Usufruct (right to use)
+- **COMODATO** - Loan for use
+- **DECRETO** - Decree
+
+### Level 2 Data Model
+
+```typescript
+type ForestPatrimonyLevel2 = {
+  id: string;
+  code: string;                    // Unique identifier code
+  name: string;                    // Property name
+  type: PatrimonyLevel2Type;
+  legalStatus: LegalStatus;
+  totalAreaHa: number;             // Total area in hectares
+  centroidLatitude?: number;       // Geographic center
+  centroidLongitude?: number;
+  ownerRepresentative?: string;    // Legal representative
+  publicRegistryNumber?: string;   // Registry ID
+  publicRegistryDate?: Date;
+  address?: string;
+  lastInfoDate?: Date;             // Last information update
+  isActive: boolean;
+};
+```
+
+<Note>
+Level 2 units can have **neighbors** - adjacent properties or land units that share boundaries with the main unit.
+</Note>
+
+## Level 3: Subdivisions
+
+Level 3 represents subdivisions within a Level 2 property, such as blocks, sections, or zones.
+
+### Level 3 Types
+
+The `PatrimonyLevel3Type` enum defines:
+
+- **COMPARTIMIENTO** - Compartment
+- **BLOCK** - Block
+- **SECCION** - Section
+- **LOTE** - Lot
+- **ZONA** - Zone
+- **BLOQUE** - Block (Spanish)
+- **ZONIFICACION** - Zoning area
+
+### Level 3 Data Model
+
+```typescript
+type ForestPatrimonyLevel3 = {
+  id: string;
+  level2Id: string;               // Parent Level 2
+  code: string;
+  name: string;
+  type: PatrimonyLevel3Type;
+  totalAreaHa: number;
+  centroidLatitude?: number;
+  centroidLongitude?: number;
+  lastInfoDate?: Date;
+  isActive: boolean;
+};
+```
+
+## Level 4: Management Units
+
+Level 4 represents the primary management unit - typically stands, plots, or specific management areas.
+
+### Level 4 Types
+
+The `PatrimonyLevel4Type` enum includes:
+
+- **RODAL** - Forest stand
+- **PARCELA** - Plot or parcel
+- **ENUMERATION** - Enumeration unit
+- **UNIDAD_DE_MANEJO** - Management unit
+- **CONUCO** - Small agricultural plot
+- **OTRO_USO** - Other use
+
+### FSC Certification
+
+Level 4 units can be FSC-certified:
+
+```typescript
+enum FscCertificateStatus {
+  SI  // Yes - FSC certified
+  NO  // No - Not FSC certified
+}
+```
+
+### Level 4 Data Model
+
+```typescript
+type ForestPatrimonyLevel4 = {
+  id: string;
+  level3Id: string;                  // Parent Level 3
+  code: string;
+  name: string;
+  type: PatrimonyLevel4Type;
+  fscCertificateStatus: FscCertificateStatus;
+  currentLandUseName?: string;       // Current land use
+  previousLandUseName?: string;      // Previous land use
+  landUseChangeDate?: Date;
+  totalAreaHa: number;
+  plantableAreaHa?: number;          // Area suitable for planting
+  rotationPhase?: string;            // Current rotation phase
+  previousUse?: string;
+  centroidLatitude?: number;
+  centroidLongitude?: number;
+  lastInfoDate?: Date;
+  isActive: boolean;
+};
+```
+
+<Note>
+**Level 4 is the key level** for land accounting, biological asset tracking, and measurement campaigns. Most analysis and reporting happens at this level.
+</Note>
+
+## Level 5: Sample Units and Plots
+
+Level 5 represents the smallest unit - individual sample plots, measurement areas, or sub-units within a Level 4 stand.
+
+### Level 5 Types
+
+The `PatrimonyLevel5Type` enum defines:
+
+- **REFERENCIA** - Reference unit
+- **SUBUNIDAD** - Sub-unit
+- **SUBPARCELA** - Sub-plot
+- **MUESTRA** - Sample unit
+- **SUBMUESTRA** - Sub-sample
+
+### Plot Shapes
+
+Level 5 units have specific geometric shapes (`PlotShapeType` enum):
+
+- **RECTANGULAR** - Rectangular plot
+- **CUADRADA** - Square plot
+- **CIRCULAR** - Circular plot
+- **HEXAGONAL** - Hexagonal plot
+
+### Level 5 Data Model
+
+```typescript
+type ForestPatrimonyLevel5 = {
+  id: string;
+  level4Id: string;                // Parent Level 4
+  code: string;
+  name: string;
+  type: PatrimonyLevel5Type;
+  shapeType: PlotShapeType;
+  dimension1M?: number;            // First dimension in meters
+  dimension2M?: number;            // Second dimension (if applicable)
+  dimension3M?: number;            // Third dimension (if applicable)
+  dimension4M?: number;            // Fourth dimension (if applicable)
+  areaM2: number;                  // Total area in square meters
+  centroidLatitude?: number;
+  centroidLongitude?: number;
+  lastInfoDate?: Date;
+  isActive: boolean;
+};
+```
+
+## Neighboring Properties
+
+Level 2 units can register neighboring properties that share boundaries:
+
+```typescript
+type ForestPatrimonyNeighbor = {
+  id: string;
+  level2Id: string;                // Parent Level 2
+  code: string;
+  name: string;
+  type: string;                    // Neighbor type/description
+};
+```
+
+## API Endpoints
+
+<Accordion title="GET /api/forest/patrimony">
+  Fetch patrimony units at any level.
+
+  **Query Parameters:**
+  - `level` (required): `"2"`, `"3"`, `"4"`, or `"5"`
+  - `parentId`: Parent unit ID (required for levels 3-5)
+  - `page`: Page number (default: 1)
+  - `limit`: Results per page (default: 25)
+  - `search`: Search term for code/name
+  - `scopeOrg`: Set to `"1"` to filter by active organization
+
+  **Response:**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "items": [...],
+      "pagination": {
+        "page": 1,
+        "totalPages": 5,
+        "total": 123,
+        "limit": 25
+      }
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="POST /api/forest/patrimony">
+  Create a new patrimony unit.
+
+  **Request Body:**
+  ```json
+  {
+    "level": "2",
+    "data": {
+      "code": "F001",
+      "name": "Finca Principal",
+      "type": "FINCA",
+      "legalStatus": "ADQUISICION",
+      "totalAreaHa": 1250.50
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="PATCH /api/forest/patrimony">
+  Update an existing patrimony unit.
+
+  **Request Body:**
+  ```json
+  {
+    "level": "4",
+    "id": "uuid-here",
+    "data": {
+      "name": "Updated Name",
+      "isActive": true
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="DELETE /api/forest/patrimony">
+  Delete a patrimony unit.
+
+  **Request Body:**
+  ```json
+  {
+    "level": "5",
+    "id": "uuid-here"
+  }
+  ```
+</Accordion>
+
+## Import/Export
+
+The system supports bulk import and export of patrimony data at all levels:
+
+### Export Formats
+- CSV
+- XLSX (Excel)
+
+### Import
+Upload CSV or XLSX files with patrimony data. The system will:
+- Create new units
+- Update existing units (matched by code)
+- Skip invalid records
+- Return detailed error reports
+
+**Endpoint:** `/api/forest/patrimony/import` (POST)
+
+**Endpoint:** `/api/forest/patrimony/export` (GET)
+
+## Code Example
+
+```typescript
+// Fetch all Level 2 properties for the active organization
+const response = await fetch(
+  '/api/forest/patrimony?level=2&page=1&limit=100&scopeOrg=1'
+);
+const result = await response.json();
+const level2Units = result.data.items;
+
+// Fetch Level 3 subdivisions for a specific Level 2
+const level2Id = 'uuid-here';
+const level3Response = await fetch(
+  `/api/forest/patrimony?level=3&parentId=${level2Id}&page=1&limit=50`
+);
+const level3Units = level3Response.data.items;
+
+// Create a new Level 4 stand
+const createResponse = await fetch('/api/forest/patrimony', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    level: '4',
+    data: {
+      code: 'R001',
+      name: 'Rodal Pino 1',
+      type: 'RODAL',
+      fscCertificateStatus: 'SI',
+      totalAreaHa: 12.5,
+      plantableAreaHa: 11.8
+    }
+  })
+});
+```
+
+<Note>
+All patrimony operations require appropriate permissions. Level 4 units are the foundation for biological assets and land accounting operations.
+</Note>

@@ -1,0 +1,201 @@
+---
+title: 'Login Validation'
+description: 'Pre-validate user organization access before password submission'
+---
+
+## POST /api/auth/login-validation
+
+Validates whether a user has access to a specific organization before attempting full authentication. This lightweight endpoint helps provide early feedback in the login flow without requiring password verification.
+
+### Use Case
+
+This endpoint is useful when:
+- You want to validate organization access before prompting for password
+- Implementing a multi-step login form
+- Providing immediate feedback on organization selection
+- Reducing unnecessary password verification attempts
+
+### Request Body
+
+<ParamField body="identifier" type="string" required>
+  User email or username (case-insensitive)
+</ParamField>
+
+<ParamField body="organizationId" type="string" required>
+  UUID of the organization to validate access for
+</ParamField>
+
+### Response
+
+#### Success Response (200)
+
+```json
+{
+  "success": true,
+  "data": {
+    "canAttemptLogin": true
+  }
+}
+```
+
+<ResponseField name="canAttemptLogin" type="boolean">
+  Whether the user can proceed with login attempt for the specified organization
+</ResponseField>
+
+#### Error Responses
+
+**400 Bad Request** - Missing parameters
+
+```json
+{
+  "success": false,
+  "message": "Datos inválidos"
+}
+```
+
+**409 Conflict** - User not in organization
+
+```json
+{
+  "success": false,
+  "message": "El usuario no pertenece a la organización seleccionada",
+  "error": {
+    "code": "USER_NOT_IN_ORG"
+  }
+}
+```
+
+**409 Conflict** - User not active
+
+```json
+{
+  "success": false,
+  "message": "El usuario no está activo",
+  "error": {
+    "code": "USER_NOT_ACTIVE"
+  }
+}
+```
+
+### Validation Logic
+
+1. **User Lookup**: Searches for user by email or username (case-insensitive)
+2. **User Not Found**: Returns `canAttemptLogin: true` (to prevent user enumeration)
+3. **Organization Access**: Checks if user has access to the specified organization
+4. **Status Check**: Verifies user status is `ACTIVE`
+5. **Result**: Returns success if all checks pass
+
+### Security Considerations
+
+**User Enumeration Protection**: If the user doesn't exist, the endpoint returns `canAttemptLogin: true` instead of an error. This prevents attackers from discovering valid usernames/emails.
+
+**No Password Required**: This endpoint doesn't verify passwords, making it safe for preliminary validation without exposing credentials.
+
+**Status Verification**: Only ACTIVE users can proceed with login attempts.
+
+### Example
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST 'https://api.smyeg.com/api/auth/login-validation' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "identifier": "user@example.com",
+    "organizationId": "550e8400-e29b-41d4-a716-446655440000"
+  }'
+```
+
+```javascript JavaScript
+async function validateLogin(identifier, organizationId) {
+  try {
+    const response = await fetch('https://api.smyeg.com/api/auth/login-validation', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ identifier, organizationId })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      // Handle specific error codes
+      if (result.error?.code === 'USER_NOT_IN_ORG') {
+        console.error('User does not have access to this organization');
+      } else if (result.error?.code === 'USER_NOT_ACTIVE') {
+        console.error('User account is not active');
+      }
+      return false;
+    }
+
+    return result.data.canAttemptLogin;
+  } catch (error) {
+    console.error('Validation failed:', error);
+    return false;
+  }
+}
+
+// Usage in login form
+const canProceed = await validateLogin('user@example.com', selectedOrgId);
+if (canProceed) {
+  // Show password field and continue login
+} else {
+  // Show error message
+}
+```
+
+```python Python
+import requests
+
+def validate_login(identifier: str, organization_id: str) -> bool:
+    response = requests.post(
+        'https://api.smyeg.com/api/auth/login-validation',
+        json={
+            'identifier': identifier,
+            'organizationId': organization_id
+        }
+    )
+    
+    if response.status_code != 200:
+        error_code = response.json().get('error', {}).get('code')
+        if error_code == 'USER_NOT_IN_ORG':
+            print('User does not have access to this organization')
+        elif error_code == 'USER_NOT_ACTIVE':
+            print('User account is not active')
+        return False
+    
+    data = response.json()['data']
+    return data['canAttemptLogin']
+
+# Usage
+if validate_login('user@example.com', org_id):
+    # Proceed with password prompt
+    pass
+else:
+    # Show error
+    pass
+```
+
+</CodeGroup>
+
+### Login Flow Integration
+
+Recommended multi-step login flow:
+
+1. **Get Organizations**: Call `/api/auth/organization-options` with identifier and password
+2. **User Selects Organization**: Display organization picker if multiple options
+3. **Validate Access** (Optional): Call `/api/auth/login-validation` to verify access
+4. **Sign In**: Call `/api/auth/signin` with full credentials and organization ID
+
+Alternatively, for a simpler flow:
+
+1. **User Enters Identifier + Organization**: User provides email/username and selects organization
+2. **Validate Access**: Call `/api/auth/login-validation`
+3. **Show Password Field**: If validation passes, show password field
+4. **Sign In**: Call `/api/auth/signin` with complete credentials
+
+### Related Endpoints
+
+- [Organization Options](/api/auth/organization-options) - Get list of organizations for user
+- [Sign In](/api/auth/login) - Complete authentication

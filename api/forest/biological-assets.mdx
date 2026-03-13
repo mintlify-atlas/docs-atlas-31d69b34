@@ -1,0 +1,508 @@
+---
+title: 'Biological Assets'
+description: 'Manage forest biological assets (Level 6) with inventory and dendrometric data'
+---
+
+## Overview
+
+The Biological Assets API manages Level 6 forest units representing individual biological assets (commercial or research plantations). Each asset tracks:
+
+- **Genetic Material**: Species, provenance, vegetal material
+- **Management**: Scheme, inventory type, spacing, rotation
+- **Dendrometry**: Height, diameter, basal area, volume
+- **Classification**: IMA class, survival rate, tree density
+- **Accounting**: Cost tracking, establishment date
+
+## Get Biological Assets
+
+<CodeGroup>
+```bash GET /api/forest/biological-assets
+curl -X GET "https://api.smyeg.com/api/forest/biological-assets?level4Id={id}&page=1&limit=25" \
+  -H "Authorization: Bearer {token}"
+```
+</CodeGroup>
+
+### Query Parameters
+
+<ParamField query="level4Id" type="string">
+  Filter by Level 4 unit UUID
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search by biological asset key, accounting key, genetic material name, or inventory code
+</ParamField>
+
+<ParamField query="sortBy" type="string" default="biologicalAssetKey">
+  Sort field: `biologicalAssetKey`, `establishmentDate`, `plantingYear`, `createdAt`
+</ParamField>
+
+<ParamField query="sortOrder" type="string" default="asc">
+  Sort direction: `asc` or `desc`
+</ParamField>
+
+<ParamField query="page" type="number" default="1">
+  Page number
+</ParamField>
+
+<ParamField query="limit" type="number" default="25">
+  Items per page (max 100)
+</ParamField>
+
+### Response
+
+<ResponseField name="items" type="array">
+  Array of biological assets
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Unique identifier (UUID)
+    </ResponseField>
+    
+    <ResponseField name="level4Id" type="string">
+      Parent Level 4 UUID
+    </ResponseField>
+    
+    <ResponseField name="biologicalAssetKey" type="string">
+      Unique asset key (max 220 chars)
+    </ResponseField>
+    
+    <ResponseField name="accountingKey" type="string">
+      Accounting system key
+    </ResponseField>
+    
+    <ResponseField name="establishmentDate" type="string">
+      ISO 8601 date
+    </ResponseField>
+    
+    <ResponseField name="plantingYear" type="number">
+      Year planted
+    </ResponseField>
+    
+    <ResponseField name="geneticMaterialCode" type="string">
+      Genetic material code
+    </ResponseField>
+    
+    <ResponseField name="geneticMaterialName" type="string">
+      Genetic material name
+    </ResponseField>
+    
+    <ResponseField name="assetType" type="string">
+      COMERCIAL or INVESTIGACION
+    </ResponseField>
+    
+    <ResponseField name="managementSchemeCode" type="string">
+      Management scheme code
+    </ResponseField>
+    
+    <ResponseField name="managementSchemeName" type="string">
+      Management scheme name
+    </ResponseField>
+    
+    <ResponseField name="inventoryCode" type="string">
+      Inventory code
+    </ResponseField>
+    
+    <ResponseField name="inventoryType" type="string">
+      Inventory type description
+    </ResponseField>
+    
+    <ResponseField name="inventoryDate" type="string">
+      ISO 8601 date
+    </ResponseField>
+    
+    <ResponseField name="inventoryAgeYears" type="number">
+      Age at inventory in years
+    </ResponseField>
+    
+    <ResponseField name="level5UnitCount" type="number">
+      Count of Level 5 sampling units
+    </ResponseField>
+    
+    <ResponseField name="spacingCode" type="string">
+      Spacing configuration code
+    </ResponseField>
+    
+    <ResponseField name="spacingDescription" type="string">
+      Spacing description
+    </ResponseField>
+    
+    <ResponseField name="spacingBetweenRowsM" type="number">
+      Spacing between rows in meters
+    </ResponseField>
+    
+    <ResponseField name="spacingBetweenTreesM" type="number">
+      Spacing between trees in meters
+    </ResponseField>
+    
+    <ResponseField name="treeDensityPerHa" type="number">
+      Trees per hectare
+    </ResponseField>
+    
+    <ResponseField name="survivalRate" type="number">
+      Survival rate percentage (0-100)
+    </ResponseField>
+    
+    <ResponseField name="dominantHeightM" type="number">
+      Dominant height in meters
+    </ResponseField>
+    
+    <ResponseField name="meanHeightM" type="number">
+      Mean height in meters
+    </ResponseField>
+    
+    <ResponseField name="quadraticDiameterM" type="number">
+      Quadratic mean diameter in meters
+    </ResponseField>
+    
+    <ResponseField name="basalAreaM2" type="number">
+      Basal area in square meters
+    </ResponseField>
+    
+    <ResponseField name="unitVolumeM3NoBarkPerHa" type="number">
+      Volume without bark per hectare (m³)
+    </ResponseField>
+    
+    <ResponseField name="unitVolumeM3WithBarkPerHa" type="number">
+      Volume with bark per hectare (m³)
+    </ResponseField>
+    
+    <ResponseField name="totalVolumeM3NoBark" type="number">
+      Total volume without bark (m³)
+    </ResponseField>
+    
+    <ResponseField name="totalVolumeM3WithBark" type="number">
+      Total volume with bark (m³)
+    </ResponseField>
+    
+    <ResponseField name="adjustedVolumeM3NoBarkPerHa" type="number">
+      Adjusted volume without bark per hectare (m³)
+    </ResponseField>
+    
+    <ResponseField name="adjustedVolumeM3WithBarkPerHa" type="number">
+      Adjusted volume with bark per hectare (m³)
+    </ResponseField>
+    
+    <ResponseField name="imaClassCode" type="string">
+      IMA (Mean Annual Increment) class code
+    </ResponseField>
+    
+    <ResponseField name="imaClassName" type="string">
+      IMA class name (I, II, III, IV, V)
+    </ResponseField>
+    
+    <ResponseField name="actualCostUsd" type="number">
+      Actual cost in USD
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Active status
+    </ResponseField>
+    
+    <ResponseField name="level4" type="object">
+      Parent Level 4 reference
+      
+      <Expandable title="properties">
+        <ResponseField name="id" type="string">UUID</ResponseField>
+        <ResponseField name="code" type="string">Code</ResponseField>
+        <ResponseField name="name" type="string">Name</ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  <Expandable title="properties">
+    <ResponseField name="total" type="number">Total records</ResponseField>
+    <ResponseField name="page" type="number">Current page</ResponseField>
+    <ResponseField name="limit" type="number">Items per page</ResponseField>
+    <ResponseField name="totalPages" type="number">Total pages</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "items": [
+    {
+      "id": "770e8400-e29b-41d4-a716-446655440000",
+      "level4Id": "550e8400-e29b-41d4-a716-446655440000",
+      "biologicalAssetKey": "BA-2024-001",
+      "accountingKey": "ACC-001",
+      "establishmentDate": "2020-03-15T00:00:00.000Z",
+      "plantingYear": 2020,
+      "geneticMaterialCode": "GM-PINE-001",
+      "geneticMaterialName": "Pinus caribaea var. hondurensis",
+      "assetType": "COMERCIAL",
+      "managementSchemeCode": "MS-001",
+      "managementSchemeName": "Intensive Management",
+      "inventoryCode": "INV-2024-Q1",
+      "inventoryType": "Continuous Forest Inventory",
+      "inventoryDate": "2024-01-15T00:00:00.000Z",
+      "inventoryAgeYears": 4,
+      "level5UnitCount": 12,
+      "spacingCode": "SP-3x3",
+      "spacingDescription": "3m x 3m",
+      "spacingBetweenRowsM": 3.0,
+      "spacingBetweenTreesM": 3.0,
+      "treeDensityPerHa": 1111,
+      "survivalRate": 92.5,
+      "dominantHeightM": 12.5,
+      "meanHeightM": 11.2,
+      "quadraticDiameterM": 0.18,
+      "basalAreaM2": 28.5,
+      "unitVolumeM3NoBarkPerHa": 145.3,
+      "unitVolumeM3WithBarkPerHa": 162.8,
+      "totalVolumeM3NoBark": 17436.0,
+      "totalVolumeM3WithBark": 19536.0,
+      "imaClassCode": "IMA-II",
+      "imaClassName": "Class II",
+      "actualCostUsd": 125000.00,
+      "isActive": true,
+      "level4": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "code": "N4-001",
+        "name": "Rodal Principal"
+      },
+      "createdAt": "2024-01-10T14:30:00.000Z",
+      "updatedAt": "2024-01-15T10:20:00.000Z"
+    }
+  ],
+  "pagination": {
+    "total": 1,
+    "page": 1,
+    "limit": 25,
+    "totalPages": 1
+  }
+}
+```
+</ResponseExample>
+
+## Create Biological Asset
+
+<CodeGroup>
+```bash POST /api/forest/biological-assets
+curl -X POST "https://api.smyeg.com/api/forest/biological-assets" \
+  -H "Authorization: Bearer {token}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "level4Id": "550e8400-e29b-41d4-a716-446655440000",
+    "biologicalAssetKey": "BA-2024-002",
+    "assetType": "COMERCIAL",
+    "geneticMaterialCode": "GM-EUCA-001",
+    "geneticMaterialName": "Eucalyptus grandis",
+    "establishmentDate": "2023-06-01T00:00:00.000Z",
+    "plantingYear": 2023,
+    "treeDensityPerHa": 1250,
+    "isActive": true
+  }'
+```
+</CodeGroup>
+
+### Body Parameters
+
+<ParamField body="level4Id" type="string" required>
+  Parent Level 4 UUID
+</ParamField>
+
+<ParamField body="biologicalAssetKey" type="string" required>
+  Unique asset key (max 220 chars)
+</ParamField>
+
+<ParamField body="assetType" type="string" default="COMERCIAL">
+  Asset type: `COMERCIAL` or `INVESTIGACION`
+</ParamField>
+
+<ParamField body="geneticMaterialCode" type="string">
+  Genetic material code (max 80 chars)
+</ParamField>
+
+<ParamField body="geneticMaterialName" type="string">
+  Genetic material name (max 255 chars)
+</ParamField>
+
+<ParamField body="establishmentDate" type="string">
+  ISO 8601 date
+</ParamField>
+
+<ParamField body="plantingYear" type="number">
+  Year planted (integer)
+</ParamField>
+
+<ParamField body="accountingKey" type="string">
+  Accounting system key
+</ParamField>
+
+<ParamField body="managementSchemeCode" type="string">
+  Management scheme code
+</ParamField>
+
+<ParamField body="inventoryCode" type="string">
+  Inventory code
+</ParamField>
+
+<ParamField body="inventoryType" type="string">
+  Inventory type description
+</ParamField>
+
+<ParamField body="inventoryDate" type="string">
+  ISO 8601 date
+</ParamField>
+
+<ParamField body="inventoryAgeYears" type="number">
+  Age at inventory in years
+</ParamField>
+
+<ParamField body="spacingBetweenRowsM" type="number">
+  Spacing between rows in meters (decimal)
+</ParamField>
+
+<ParamField body="spacingBetweenTreesM" type="number">
+  Spacing between trees in meters (decimal)
+</ParamField>
+
+<ParamField body="treeDensityPerHa" type="number">
+  Trees per hectare (integer)
+</ParamField>
+
+<ParamField body="survivalRate" type="number">
+  Survival rate percentage (0-100)
+</ParamField>
+
+<ParamField body="dominantHeightM" type="number">
+  Dominant height in meters
+</ParamField>
+
+<ParamField body="meanHeightM" type="number">
+  Mean height in meters
+</ParamField>
+
+<ParamField body="quadraticDiameterM" type="number">
+  Quadratic mean diameter in meters
+</ParamField>
+
+<ParamField body="basalAreaM2" type="number">
+  Basal area in square meters
+</ParamField>
+
+<ParamField body="totalVolumeM3NoBark" type="number">
+  Total volume without bark (m³)
+</ParamField>
+
+<ParamField body="totalVolumeM3WithBark" type="number">
+  Total volume with bark (m³)
+</ParamField>
+
+<ParamField body="imaClassCode" type="string">
+  IMA class code
+</ParamField>
+
+<ParamField body="actualCostUsd" type="number">
+  Actual cost in USD
+</ParamField>
+
+<ParamField body="isActive" type="boolean" default="true">
+  Active status
+</ParamField>
+
+### Response
+
+Returns the created biological asset with status code 201.
+
+## Update Biological Asset
+
+<CodeGroup>
+```bash PATCH /api/forest/biological-assets
+curl -X PATCH "https://api.smyeg.com/api/forest/biological-assets" \
+  -H "Authorization: Bearer {token}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "770e8400-e29b-41d4-a716-446655440000",
+    "survivalRate": 90.5,
+    "dominantHeightM": 13.2,
+    "totalVolumeM3NoBark": 18200.0
+  }'
+```
+</CodeGroup>
+
+### Body Parameters
+
+<ParamField body="id" type="string" required>
+  UUID of the biological asset to update
+</ParamField>
+
+<ParamField body="..." type="various">
+  Any fields from the create schema (partial update)
+</ParamField>
+
+## Delete Biological Asset
+
+<CodeGroup>
+```bash DELETE /api/forest/biological-assets
+curl -X DELETE "https://api.smyeg.com/api/forest/biological-assets" \
+  -H "Authorization: Bearer {token}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "770e8400-e29b-41d4-a716-446655440000"
+  }'
+```
+</CodeGroup>
+
+### Body Parameters
+
+<ParamField body="id" type="string" required>
+  UUID of the biological asset to delete
+</ParamField>
+
+<ResponseExample>
+```json Response
+{
+  "message": "Activo biológico eliminado"
+}
+```
+</ResponseExample>
+
+## Import/Export
+
+### Export Biological Assets
+
+<CodeGroup>
+```bash GET /api/forest/biological-assets/export
+curl -X GET "https://api.smyeg.com/api/forest/biological-assets/export?format=xlsx" \
+  -H "Authorization: Bearer {token}"
+```
+</CodeGroup>
+
+Export biological assets to CSV or XLSX format.
+
+### Import Biological Assets
+
+<CodeGroup>
+```bash POST /api/forest/biological-assets/import
+curl -X POST "https://api.smyeg.com/api/forest/biological-assets/import" \
+  -H "Authorization: Bearer {token}" \
+  -F "file=@biological_assets.xlsx"
+```
+</CodeGroup>
+
+Bulk import biological assets from Excel file.
+
+## Permissions
+
+Requires one of:
+- `forest-biological-asset:READ` (read operations)
+- `forest-biological-asset:CREATE` (create operations)
+- `forest-biological-asset:UPDATE` (update operations)
+- `forest-biological-asset:DELETE` (delete operations)
+- `SUPER_ADMIN` role (all operations)
+
+## Source Reference
+
+Implementation: `src/app/api/forest/biological-assets/route.ts:68-379`

@@ -1,0 +1,446 @@
+---
+title: 'Database Setup'
+description: 'PostgreSQL configuration, Prisma migrations, seeding, and partitioning for SMyEG'
+---
+
+## Overview
+
+SMyEG uses **PostgreSQL 15+** with PostGIS extensions for geospatial data and **Prisma ORM** for database access and migrations. The database includes partitioned tables for audit logs and specialized geospatial features.
+
+## PostgreSQL Requirements
+
+### Minimum Version
+
+- PostgreSQL **15.0** or higher recommended
+- PostgreSQL **14.0** minimum supported
+
+### Required Extensions
+
+<CodeGroup>
+```sql PostgreSQL Extensions
+-- UUID generation
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Cryptographic functions
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Trigram similarity search
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+
+-- Geospatial support (PostGIS)
+CREATE EXTENSION IF NOT EXISTS "postgis";
+```
+</CodeGroup>
+
+<Note>
+  These extensions are automatically installed by the first migration (`0001_init`).
+</Note>
+
+## Initial Setup
+
+<Steps>
+  <Step title="Start PostgreSQL">
+    If using Docker Compose (recommended for development):
+    ```bash
+    docker compose up -d postgres
+    ```
+    
+    Verify it's running:
+    ```bash
+    docker compose ps
+    ```
+  </Step>
+  
+  <Step title="Configure Connection">
+    Set the `DATABASE_URL` in your `.env` file:
+    ```bash
+    DATABASE_URL="postgresql://postgres:postgres@localhost:5432/app_dev?schema=public"
+    ```
+  </Step>
+  
+  <Step title="Generate Prisma Client">
+    Generate the Prisma client from the schema:
+    ```bash
+    npm run db:generate
+    # or
+    pnpm db:generate
+    ```
+  </Step>
+  
+  <Step title="Run Migrations">
+    Apply all database migrations:
+    ```bash
+    npm run db:migrate
+    # or
+    pnpm db:migrate
+    ```
+    
+    This creates all tables, extensions, indexes, and constraints.
+  </Step>
+  
+  <Step title="Seed Initial Data">
+    Load default data (modules, roles, admin user):
+    ```bash
+    npm run db:seed
+    # or
+    pnpm db:seed
+    ```
+  </Step>
+</Steps>
+
+## Database Scripts
+
+### Available Commands
+
+All database commands are defined in `package.json`:
+
+<CodeGroup>
+```bash Generate Client
+# Generate Prisma client from schema.prisma
+npm run db:generate
+```
+
+```bash Development Migration
+# Create and apply a new migration (development)
+npm run db:migrate
+```
+
+```bash Push Schema
+# Push schema changes without creating migration files
+npm run db:push
+```
+
+```bash Seed Database
+# Run seed script (prisma/seed.ts)
+npm run db:seed
+```
+
+```bash Sync Modules
+# Synchronize module definitions
+npm run db:sync-modules
+```
+</CodeGroup>
+
+## Prisma Migrations
+
+### Migration Files
+
+Migrations are stored in `prisma/migrations/`. Key migrations include:
+
+| Migration | Description |
+|-----------|-------------|
+| `0001_init` | Initial schema with extensions, base tables, enums |
+| `20260302183000_geo_spatial_jobs` | Geospatial job tables |
+| `20260303041133_forest_geometry_n4` | Level 4 geometry versioning |
+| `20260308191500_land_patrimonial_variations` | Land use variation tracking |
+| `20260309175919_assets_measurement_smyge` | Asset measurement campaigns |
+
+### Creating Migrations
+
+<Steps>
+  <Step title="Modify Schema">
+    Edit `prisma/schema.prisma` with your changes.
+  </Step>
+  
+  <Step title="Create Migration">
+    Generate a new migration file:
+    ```bash
+    npx prisma migrate dev --name your_migration_name
+    ```
+  </Step>
+  
+  <Step title="Review SQL">
+    Check the generated SQL in `prisma/migrations/[timestamp]_your_migration_name/migration.sql`
+  </Step>
+  
+  <Step title="Apply to Production">
+    Deploy migrations to production:
+    ```bash
+    npx prisma migrate deploy
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  Always review migration SQL before applying to production. Test migrations in a staging environment first.
+</Warning>
+
+## Seeding Data
+
+### Default Seed Data
+
+The seed script (`prisma/seed.ts`) creates:
+
+<AccordionGroup>
+  <Accordion title="Default Organization">
+    - **Name:** Default Organization
+    - **Slug:** `default-org`
+    - **Status:** Active
+  </Accordion>
+  
+  <Accordion title="System Modules">
+    - Authentication
+    - Users
+    - Dashboard
+    - Organizations
+    - Forest Patrimony
+    - Forest Biological Asset
+    - Forest Configuration
+    - Asset Measurement
+    - Profile
+    - Analytics
+    - General Configuration
+    - Settings
+    - Audit
+  </Accordion>
+  
+  <Accordion title="Permissions">
+    For each module, creates permissions:
+    - CREATE
+    - READ
+    - UPDATE
+    - DELETE
+    - EXPORT
+    - ADMIN
+  </Accordion>
+  
+  <Accordion title="System Roles">
+    - **SUPER_ADMIN:** Full system access
+    - **ADMIN:** Administrative access
+    - **MANAGER:** Management access
+    - **USER:** Basic user access
+  </Accordion>
+  
+  <Accordion title="Default Admin User">
+    - **Email:** `admin@example.com`
+    - **Password:** `Admin1234`
+    - **Role:** SUPER_ADMIN
+    - **Status:** Active
+  </Accordion>
+  
+  <Accordion title="System Configuration">
+    - **Site Name:** SMyEG App
+    - **Category:** general
+  </Accordion>
+</AccordionGroup>
+
+### Custom Seeding
+
+To add custom seed data, edit `prisma/seed.ts`:
+
+```typescript prisma/seed.ts
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+
+async function main() {
+  // Your seed logic here
+  
+  await prisma.organization.upsert({
+    where: { slug: "my-org" },
+    update: {},
+    create: {
+      name: "My Organization",
+      slug: "my-org",
+      isActive: true,
+    },
+  });
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
+```
+
+## Partitioned Tables
+
+### Audit Log Partitioning
+
+The `audit_logs` table is partitioned by month to improve query performance and manage data retention.
+
+#### Current Implementation
+
+Partitioning is set up in migration `0001_init/migration.sql`:
+
+```sql
+-- Audit logs are partitioned by created_at (monthly)
+CREATE TABLE audit_logs PARTITION BY RANGE (created_at);
+
+-- Create trigger for automatic partition management
+CREATE OR REPLACE FUNCTION create_monthly_partition()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Partition creation logic
+END;
+$$ LANGUAGE plpgsql;
+```
+
+#### Creating New Partitions
+
+<Note>
+  A script is available at `scripts/create-audit-partition.ts` to create future monthly partitions.
+</Note>
+
+To manually create a partition:
+
+```sql
+-- Create partition for March 2026
+CREATE TABLE audit_logs_2026_03 PARTITION OF audit_logs
+FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
+
+CREATE INDEX idx_audit_logs_2026_03_org ON audit_logs_2026_03(organization_id);
+CREATE INDEX idx_audit_logs_2026_03_user ON audit_logs_2026_03(user_id);
+CREATE INDEX idx_audit_logs_2026_03_action ON audit_logs_2026_03(action);
+```
+
+## Geospatial Features
+
+### PostGIS Setup
+
+SMyEG uses PostGIS for storing and querying forest patrimony geometries.
+
+<Steps>
+  <Step title="Enable PostGIS">
+    PostGIS is enabled automatically in migrations:
+    ```sql
+    CREATE EXTENSION IF NOT EXISTS "postgis";
+    ```
+  </Step>
+  
+  <Step title="Geometry Columns">
+    Level 4 geometry table uses native PostGIS types:
+    ```sql
+    CREATE TABLE forest_geometry_n4 (
+      id UUID PRIMARY KEY,
+      geom geometry(MultiPolygon, 4326),
+      centroid geometry(Point, 4326),
+      superficie_ha DECIMAL(12, 4),
+      ...
+    );
+    ```
+  </Step>
+  
+  <Step title="Spatial Indexes">
+    GIST indexes for efficient spatial queries:
+    ```sql
+    CREATE INDEX idx_forest_geom_gist 
+      ON forest_geometry_n4 USING GIST(geom);
+    ```
+  </Step>
+</Steps>
+
+### Coordinate Reference System
+
+- **SRID:** 4326 (WGS 84 / GPS coordinates)
+- **Format:** Longitude, Latitude
+- All uploaded shapefiles are automatically transformed to EPSG:4326
+
+## Backup and Restore
+
+### Creating Backups
+
+<CodeGroup>
+```bash Full Database Backup
+pg_dump -h localhost -U postgres -d app_dev -F c -f backup_$(date +%Y%m%d).dump
+```
+
+```bash Schema Only
+pg_dump -h localhost -U postgres -d app_dev --schema-only -f schema_backup.sql
+```
+
+```bash Data Only
+pg_dump -h localhost -U postgres -d app_dev --data-only -f data_backup.sql
+```
+</CodeGroup>
+
+### Restoring Backups
+
+<CodeGroup>
+```bash Restore Full Backup
+pg_restore -h localhost -U postgres -d app_dev -c backup_20260313.dump
+```
+
+```bash Restore from SQL
+psql -h localhost -U postgres -d app_dev -f backup.sql
+```
+</CodeGroup>
+
+<Warning>
+  Always test your backup and restore procedures regularly. Verify backups can be restored successfully.
+</Warning>
+
+## Performance Optimization
+
+### Recommended Indexes
+
+Key indexes are created automatically by migrations:
+
+- Organization ID on all multi-tenant tables
+- Foreign key columns
+- Geospatial GIST indexes
+- Composite indexes for common queries
+
+### Connection Pooling
+
+For production, configure connection pooling:
+
+```bash .env
+DATABASE_URL="postgresql://user:pass@host:5432/db?schema=public&connection_limit=20&pool_timeout=10"
+```
+
+### Maintenance Tasks
+
+Schedule regular maintenance:
+
+```sql
+-- Analyze tables for query optimization
+ANALYZE;
+
+-- Vacuum to reclaim storage
+VACUUM ANALYZE;
+
+-- Reindex spatial indexes
+REINDEX INDEX idx_forest_geom_gist;
+```
+
+## Troubleshooting
+
+### Migration Failures
+
+If migrations fail:
+
+1. Check PostgreSQL logs
+2. Verify database user has required permissions
+3. Reset migration history:
+   ```bash
+   npx prisma migrate reset
+   ```
+
+### Connection Issues
+
+```bash
+# Test connection
+psql $DATABASE_URL
+
+# Check PostgreSQL is running
+docker compose ps postgres
+
+# View logs
+docker compose logs postgres
+```
+
+### PostGIS Not Available
+
+```sql
+-- Check PostGIS installation
+SELECT PostGIS_version();
+
+-- Reinstall extension
+DROP EXTENSION IF EXISTS postgis CASCADE;
+CREATE EXTENSION postgis;
+```

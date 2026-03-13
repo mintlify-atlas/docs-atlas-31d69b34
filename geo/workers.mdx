@@ -1,0 +1,659 @@
+---
+title: 'Background Workers'
+description: 'Asynchronous processing for geospatial imports, recalculations, and land use variations'
+---
+
+## Overview
+
+SMyEG uses a dedicated **geo worker scheduler** to process geospatial operations asynchronously. The worker handles:
+
+1. **Shapefile import jobs** - Parse and import geometry from ZIP files
+2. **Recalculation jobs** - Recalculate surface area and centroid for Level 4 units
+3. **Land use variation jobs** - Create patrimonial variation records in bulk
+
+## Worker Architecture
+
+### Scheduler Process
+
+The worker runs as a separate Node.js process defined in `src/workers/geo-worker-scheduler.ts`:
+
+```typescript
+import { processNextPendingImportJob, processNextRecalcJob, processNextGeoVariationJob } from "@/lib/geo-import-worker";
+
+const intervalMs = Number.parseInt(process.env.GEO_WORKER_INTERVAL_MS ?? "4000", 10);
+const importBatchSize = Number.parseInt(process.env.GEO_IMPORT_BATCH_SIZE ?? "5", 10);
+const recalcBatchSize = Number.parseInt(process.env.GEO_RECALC_BATCH_SIZE ?? "10", 10);
+const variationBatchSize = Number.parseInt(process.env.GEO_VARIATION_BATCH_SIZE ?? "15", 10);
+
+async function runBatch() {
+  // Process import jobs
+  for (let i = 0; i < importBatchSize; i++) {
+    const result = await processNextPendingImportJob();
+    if (!result.processed) break;
+  }
+  
+  // Process recalc jobs
+  for (let i = 0; i < recalcBatchSize; i++) {
+    const result = await processNextRecalcJob();
+    if (!result.processed) break;
+  }
+  
+  // Process variation jobs
+  for (let i = 0; i < variationBatchSize; i++) {
+    const result = await processNextGeoVariationJob();
+    if (!result.processed) break;
+  }
+}
+
+setInterval(runBatch, intervalMs);
+```
+
+### Environment Variables
+
+<ParamField path="GEO_WORKER_INTERVAL_MS" type="number" default="4000">
+  Polling interval in milliseconds between batch runs
+</ParamField>
+
+<ParamField path="GEO_IMPORT_BATCH_SIZE" type="number" default="5">
+  Maximum number of import jobs to process per cycle
+</ParamField>
+
+<ParamField path="GEO_RECALC_BATCH_SIZE" type="number" default="10">
+  Maximum number of recalculation jobs to process per cycle
+</ParamField>
+
+<ParamField path="GEO_VARIATION_BATCH_SIZE" type="number" default="15">
+  Maximum number of variation jobs to process per cycle
+</ParamField>
+
+<ParamField path="GEO_WORKER_RUN_ONCE" type="boolean" default="false">
+  Run one batch cycle and exit (useful for testing)
+</ParamField>
+
+<ParamField path="GEO_WORKER_SECRET" type="string">
+  Optional secret token for authenticating worker webhook calls
+</ParamField>
+
+## Import Jobs
+
+### Job Lifecycle
+
+<Steps>
+  <Step title="PENDING">
+    Job created, waiting for worker to pick it up
+  </Step>
+
+  <Step title="EXTRACTING">
+    Worker extracts ZIP and validates required files (`.shp`, `.shx`, `.dbf`, `.prj`)
+  </Step>
+
+  <Step title="VALIDATING">
+    Worker parses shapefile and validates feature collection
+  </Step>
+
+  <Step title="PROCESSING">
+    Worker processes each feature:
+    - Extract hierarchy codes
+    - Validate hierarchy exists
+    - Normalize geometry
+    - Insert/update geometry
+    - Calculate area and centroid
+    - Create land use variations
+  </Step>
+
+  <Step title="COMPLETED / FAILED">
+    Job finishes with success or error message
+  </Step>
+</Steps>
+
+### Database Schema
+
+```prisma
+model GeoImportJob {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String              @db.Uuid
+  fileName          String
+  storagePath       String
+  status            GeoImportJobStatus  @default(PENDING)
+  totalRecords      Int                 @default(0)
+  processedRecords  Int                 @default(0)
+  failedRecords     Int                 @default(0)
+  errorMessage      String?
+  metadata          Json?               // Stores variation defaults, etc.
+  createdById       String?             @db.Uuid
+  createdAt         DateTime            @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+}
+
+enum GeoImportJobStatus {
+  PENDING
+  EXTRACTING
+  VALIDATING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+```
+
+### Processing Function
+
+```typescript
+export async function processGeoImportJob(jobId: string) {
+  const job = await prisma.geoImportJob.findUnique({ where: { id: jobId } });
+  if (!job) return { processed: false, reason: "job_not_found" };
+  
+  if (job.status === GeoImportJobStatus.PROCESSING) {
+    return { processed: false, reason: "already_processing" };
+  }
+  
+  await setJobStatus(jobId, GeoImportJobStatus.EXTRACTING, {
+    startedAt: new Date(),
+    errorMessage: null,
+    processedRecords: 0,
+    failedRecords: 0
+  });
+  
+  try {
+    const zipBuffer = await fs.readFile(job.storagePath);
+    const zip = await JSZip.loadAsync(zipBuffer);
+    
+    // Validate required files
+    const requiredExtensions = [".shp", ".shx", ".dbf", ".prj"];
+    const fileNames = Object.keys(zip.files).map(name => name.toLowerCase());
+    const missing = requiredExtensions.filter(ext => 
+      !fileNames.some(name => name.endsWith(ext))
+    );
+    
+    if (missing.length > 0) {
+      throw new Error(`Archivo ZIP inválido. Faltan: ${missing.join(", ")}`);
+    }
+    
+    await setJobStatus(jobId, GeoImportJobStatus.VALIDATING);
+    
+    const geoRaw = await parseShapefile(zipBuffer);
+    const collection = normalizeCollection(geoRaw);
+    
+    await setJobStatus(jobId, GeoImportJobStatus.PROCESSING, {
+      totalRecords: collection.features.length
+    });
+    
+    // Process each feature...
+    
+    await setJobStatus(jobId, GeoImportJobStatus.COMPLETED, {
+      completedAt: new Date(),
+      processedRecords,
+      failedRecords
+    });
+    
+    return { processed: true, status: GeoImportJobStatus.COMPLETED };
+  } catch (error) {
+    await setJobStatus(jobId, GeoImportJobStatus.FAILED, {
+      completedAt: new Date(),
+      errorMessage: error.message
+    });
+    
+    return { processed: true, status: GeoImportJobStatus.FAILED, error: error.message };
+  }
+}
+```
+
+### Import Job Items
+
+Each feature in the shapefile generates a `GeoImportJobItem` record:
+
+```prisma
+model GeoImportJobItem {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId          String               @db.Uuid
+  featureIndex   Int                  // Index in feature collection
+  status         GeoImportItemStatus
+  level2Code     String?
+  level3Code     String?
+  level4Code     String?
+  message        String?              // Error message if failed
+  rawProperties  Json?                // Original shapefile attributes
+  createdAt      DateTime             @default(now())
+}
+
+enum GeoImportItemStatus {
+  PROCESSED
+  FAILED
+}
+```
+
+## Recalculation Jobs
+
+### When to Recalculate
+
+Recalculation jobs are triggered when:
+- Geometry is manually edited
+- Geometry is split or merged
+- Geometry operations complete
+
+### Job Creation
+
+```typescript
+export async function enqueueLevel4RecalcJob(params: {
+  organizationId: string;
+  level4Id: string;
+  createdById?: string | null;
+}) {
+  await prisma.forestGeometryRecalcJob.create({
+    data: {
+      organizationId: params.organizationId,
+      level4Id: params.level4Id,
+      status: GeoRecalcJobStatus.PENDING,
+      createdById: params.createdById ?? null
+    }
+  });
+}
+```
+
+### Database Schema
+
+```prisma
+model ForestGeometryRecalcJob {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String              @db.Uuid
+  level4Id       String              @db.Uuid
+  status         GeoRecalcJobStatus  @default(PENDING)
+  lastError      String?
+  attempts       Int                 @default(0)
+  runAfter       DateTime            @default(now())
+  createdById    String?             @db.Uuid
+  createdAt      DateTime            @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+}
+
+enum GeoRecalcJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+```
+
+### Processing Function
+
+```typescript
+export async function processNextRecalcJob() {
+  const job = await prisma.forestGeometryRecalcJob.findFirst({
+    where: {
+      status: GeoRecalcJobStatus.PENDING,
+      runAfter: { lte: new Date() }
+    },
+    orderBy: { createdAt: "asc" }
+  });
+  
+  if (!job) return { processed: false, reason: "no_pending_recalc_jobs" };
+  
+  await prisma.forestGeometryRecalcJob.update({
+    where: { id: job.id },
+    data: {
+      status: GeoRecalcJobStatus.PROCESSING,
+      startedAt: new Date(),
+      attempts: { increment: 1 },
+      lastError: null
+    }
+  });
+  
+  try {
+    const metrics = await prisma.$queryRaw`
+      SELECT
+        superficie_ha::double precision,
+        ST_Y(centroid) AS lat,
+        ST_X(centroid) AS lon
+      FROM forest_geometry_n4
+      WHERE organization_id = ${job.organizationId}::uuid
+        AND level4_id = ${job.level4Id}::uuid
+        AND is_active = TRUE
+      ORDER BY valid_from DESC
+      LIMIT 1
+    `;
+    
+    const metric = metrics[0];
+    if (!metric) {
+      throw new Error("No existe geometría activa");
+    }
+    
+    await prisma.$transaction(async (tx) => {
+      // Update Level 4 record
+      await tx.forestPatrimonyLevel4.update({
+        where: { id: job.level4Id },
+        data: {
+          totalAreaHa: metric.superficie_ha,
+          centroidLatitude: metric.lat,
+          centroidLongitude: metric.lon
+        }
+      });
+      
+      // Sync land use totals
+      await syncLandUseSurfaceTotals(tx, job.organizationId);
+      
+      // Complete job
+      await tx.forestGeometryRecalcJob.update({
+        where: { id: job.id },
+        data: {
+          status: GeoRecalcJobStatus.COMPLETED,
+          completedAt: new Date()
+        }
+      });
+    });
+    
+    return { processed: true, status: GeoRecalcJobStatus.COMPLETED };
+  } catch (error) {
+    await prisma.forestGeometryRecalcJob.update({
+      where: { id: job.id },
+      data: {
+        status: GeoRecalcJobStatus.FAILED,
+        completedAt: new Date(),
+        lastError: error.message
+      }
+    });
+    
+    return { processed: true, status: GeoRecalcJobStatus.FAILED };
+  }
+}
+```
+
+## Land Use Variation Jobs
+
+### Bulk Variation Creation
+
+Variation jobs allow creating multiple `LandPatrimonialVariation` records in a single background job.
+
+### Database Schema
+
+```prisma
+model GeoLandVariationJob {
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String                 @db.Uuid
+  payload        Json                   // Array of variation items
+  variationDate  DateTime
+  notes          String?
+  status         GeoVariationJobStatus  @default(PENDING)
+  lastError      String?
+  attempts       Int                    @default(0)
+  runAfter       DateTime               @default(now())
+  createdById    String?                @db.Uuid
+  createdAt      DateTime               @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+}
+
+enum GeoVariationJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+```
+
+### Payload Structure
+
+```typescript
+type GeoVariationPayload = {
+  items: Array<{
+    level4Id: string;
+    previousLandUseName?: string;
+    newLandUseName: string;
+    affectedAreaHa?: number;  // Optional, defaults to Level 4 total area
+  }>;
+};
+```
+
+### Processing Function
+
+```typescript
+export async function processNextGeoVariationJob() {
+  const job = await prisma.geoLandVariationJob.findFirst({
+    where: {
+      status: GeoVariationJobStatus.PENDING,
+      runAfter: { lte: new Date() }
+    },
+    orderBy: { createdAt: "asc" }
+  });
+  
+  if (!job) return { processed: false, reason: "no_pending_geo_variation_jobs" };
+  
+  await prisma.geoLandVariationJob.update({
+    where: { id: job.id },
+    data: {
+      status: GeoVariationJobStatus.PROCESSING,
+      startedAt: new Date(),
+      attempts: { increment: 1 },
+      lastError: null
+    }
+  });
+  
+  try {
+    const payload = job.payload as { items?: GeoVariationPayloadItem[] };
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    
+    if (items.length === 0) {
+      throw new Error("El job no contiene items de variación");
+    }
+    
+    let createdCount = 0;
+    
+    for (const item of items) {
+      const level4Id = typeof item.level4Id === "string" ? item.level4Id.trim() : "";
+      if (!level4Id) continue;
+      
+      const level4 = await prisma.forestPatrimonyLevel4.findFirst({
+        where: {
+          id: level4Id,
+          isActive: true,
+          level3: { level2: { organizationId: job.organizationId } }
+        },
+        select: { id: true, totalAreaHa: true, currentLandUseName: true }
+      });
+      
+      if (!level4) continue;
+      
+      const newLandUseName = normalizeOptionalText(item.newLandUseName) 
+        ?? normalizeOptionalText(level4.currentLandUseName);
+      
+      if (!newLandUseName) continue;
+      
+      const previousLandUseName = normalizeOptionalText(item.previousLandUseName);
+      const affectedAreaHa = item.affectedAreaHa ?? Number(level4.totalAreaHa);
+      
+      const kind = previousLandUseName && previousLandUseName.toLowerCase() !== newLandUseName.toLowerCase()
+        ? "INCREMENTO"
+        : "SIN_CAMBIO";
+      
+      await prisma.landPatrimonialVariation.create({
+        data: {
+          organizationId: job.organizationId,
+          level4Id: level4.id,
+          previousLandUseName,
+          newLandUseName,
+          affectedAreaHa,
+          kind,
+          status: "PENDIENTE",
+          variationDate: job.variationDate,
+          notes: job.notes,
+          createdById: job.createdById
+        }
+      });
+      
+      createdCount++;
+    }
+    
+    await prisma.geoLandVariationJob.update({
+      where: { id: job.id },
+      data: {
+        status: GeoVariationJobStatus.COMPLETED,
+        completedAt: new Date()
+      }
+    });
+    
+    return { processed: true, status: GeoVariationJobStatus.COMPLETED, createdCount };
+  } catch (error) {
+    await prisma.geoLandVariationJob.update({
+      where: { id: job.id },
+      data: {
+        status: GeoVariationJobStatus.FAILED,
+        completedAt: new Date(),
+        lastError: error.message
+      }
+    });
+    
+    return { processed: true, status: GeoVariationJobStatus.FAILED };
+  }
+}
+```
+
+## Running the Worker
+
+### Development
+
+```bash
+pnpm worker:geo
+```
+
+### Production with PM2
+
+```javascript
+// ecosystem.config.cjs
+module.exports = {
+  apps: [
+    {
+      name: "smyeg-web",
+      script: "node_modules/next/dist/bin/next",
+      args: "start",
+      env: {
+        NODE_ENV: "production",
+        PORT: 3000
+      }
+    },
+    {
+      name: "smyeg-geo-worker",
+      script: "node",
+      args: "-r ts-node/register/transpile-only src/workers/geo-worker-scheduler.ts",
+      env: {
+        NODE_ENV: "production",
+        GEO_WORKER_INTERVAL_MS: 4000,
+        GEO_IMPORT_BATCH_SIZE: 5,
+        GEO_RECALC_BATCH_SIZE: 10,
+        GEO_VARIATION_BATCH_SIZE: 15
+      }
+    }
+  ]
+};
+```
+
+```bash
+pm2 start ecosystem.config.cjs
+pm2 logs smyeg-geo-worker
+```
+
+### One-Time Execution
+
+Run a single batch cycle (useful for testing):
+
+```bash
+GEO_WORKER_RUN_ONCE=true pnpm worker:geo
+```
+
+## Worker Monitoring
+
+### Log Output
+
+The worker logs processed jobs to console:
+
+```
+[2026-03-13T10:15:00.000Z] [geo-worker] started (interval=4000ms, importBatch=5, recalcBatch=10, variationBatch=15, runOnce=false)
+[2026-03-13T10:15:04.123Z] [geo-worker] processed import_jobs=2 recalc_jobs=5 variation_jobs=1
+[2026-03-13T10:15:08.456Z] [geo-worker] processed import_jobs=0 recalc_jobs=3 variation_jobs=0
+```
+
+### Database Monitoring
+
+Query pending jobs:
+
+```sql
+-- Import jobs
+SELECT status, COUNT(*)
+FROM "GeoImportJob"
+GROUP BY status;
+
+-- Recalc jobs
+SELECT status, COUNT(*)
+FROM "ForestGeometryRecalcJob"
+GROUP BY status;
+
+-- Variation jobs
+SELECT status, COUNT(*)
+FROM "GeoLandVariationJob"
+GROUP BY status;
+```
+
+### Failed Job Retry
+
+Manually retry a failed job by updating its status:
+
+```sql
+UPDATE "GeoImportJob"
+SET status = 'PENDING',
+    "errorMessage" = NULL,
+    "startedAt" = NULL
+WHERE id = 'job-uuid'
+  AND status = 'FAILED';
+```
+
+## Error Handling
+
+### Retry Logic
+
+Jobs are **not automatically retried** by default. Implement custom retry logic:
+
+```typescript
+const MAX_ATTEMPTS = 3;
+
+if (job.attempts < MAX_ATTEMPTS) {
+  await prisma.forestGeometryRecalcJob.update({
+    where: { id: job.id },
+    data: {
+      status: GeoRecalcJobStatus.PENDING,
+      runAfter: new Date(Date.now() + 60000)  // Retry in 1 minute
+    }
+  });
+} else {
+  await prisma.forestGeometryRecalcJob.update({
+    where: { id: job.id },
+    data: { status: GeoRecalcJobStatus.FAILED }
+  });
+}
+```
+
+### Graceful Shutdown
+
+The worker handles `SIGINT` and `SIGTERM` signals:
+
+```typescript
+process.on("SIGINT", () => {
+  clearInterval(timer);
+  void shutdown("SIGINT");
+});
+
+process.on("SIGTERM", () => {
+  clearInterval(timer);
+  void shutdown("SIGTERM");
+});
+
+async function shutdown(signal: string) {
+  console.info(`[geo-worker] stopping scheduler (${signal})...`);
+  await prisma.$disconnect();
+  process.exit(0);
+}
+```
+
+## Related Documentation
+
+- [Shapefile Import](/geo/shapefile-import) - Import process details
+- [Map Visualization](/geo/map-visualization) - Viewing processed data
+- [Data Hierarchy](/geo/data-hierarchy) - Forest patrimony structure

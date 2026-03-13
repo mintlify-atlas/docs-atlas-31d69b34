@@ -1,0 +1,254 @@
+---
+title: 'Environment Variables'
+description: 'Complete reference for all environment variables used in SMyEG application'
+---
+
+## Overview
+
+SMyEG uses environment variables to configure database connections, authentication, worker processes, and export limits. All variables should be defined in a `.env` file at the root of your project.
+
+## Core Configuration
+
+### Database
+
+<ParamField path="DATABASE_URL" type="string" required>
+  PostgreSQL connection string for Prisma ORM.
+  
+  **Format:** `postgresql://[user]:[password]@[host]:[port]/[database]?schema=public`
+  
+  **Example:** `postgresql://postgres:postgres@localhost:5432/app_dev?schema=public`
+</ParamField>
+
+### Authentication
+
+<ParamField path="NEXTAUTH_URL" type="string" required>
+  Base URL of your application for NextAuth.js.
+  
+  **Development:** `http://localhost:3000`
+  
+  **Production:** `https://yourdomain.com`
+</ParamField>
+
+<ParamField path="NEXTAUTH_SECRET" type="string" required>
+  Secret key for encrypting NextAuth.js tokens and sessions.
+  
+  Generate using: `openssl rand -base64 32`
+  
+  **Example:** `your-very-secure-random-string-here`
+</ParamField>
+
+### Node Environment
+
+<ParamField path="NODE_ENV" type="string" default="development">
+  Application environment mode.
+  
+  **Values:** `development`, `production`, `test`
+</ParamField>
+
+## Worker Configuration
+
+### Geo Worker
+
+The geo worker handles asynchronous processing of shapefile imports and surface area recalculations.
+
+<ParamField path="GEO_WORKER_INTERVAL_MS" type="number" default="4000">
+  Polling interval in milliseconds for the geo worker scheduler.
+  
+  **Recommended:** `4000` - `10000` (4-10 seconds)
+</ParamField>
+
+<ParamField path="GEO_IMPORT_BATCH_SIZE" type="number" default="5">
+  Maximum number of import jobs processed per worker cycle.
+  
+  **Recommended:** `5` - `20` depending on server capacity
+</ParamField>
+
+<ParamField path="GEO_RECALC_BATCH_SIZE" type="number" default="10">
+  Maximum number of recalculation jobs processed per worker cycle.
+  
+  **Recommended:** `10` - `50` depending on server capacity
+</ParamField>
+
+<ParamField path="GEO_VARIATION_BATCH_SIZE" type="number" default="5">
+  Maximum number of land variation jobs processed per worker cycle.
+</ParamField>
+
+<ParamField path="GEO_WORKER_RUN_ONCE" type="boolean" default="false">
+  Execute a single worker cycle then exit (useful for testing).
+  
+  **Values:** `true`, `false`
+</ParamField>
+
+<ParamField path="GEO_WORKER_SECRET" type="string">
+  Optional secret for securing geo worker API endpoints.
+</ParamField>
+
+### Asset Measurement Worker
+
+Handles asynchronous processing of asset measurement calculations.
+
+<ParamField path="ASSET_MEASUREMENT_WORKER_INTERVAL_MS" type="number" default="5000">
+  Polling interval in milliseconds for the asset measurement worker.
+</ParamField>
+
+<ParamField path="ASSET_MEASUREMENT_WORKER_BATCH_SIZE" type="number" default="10">
+  Maximum number of calculation jobs processed per worker cycle.
+</ParamField>
+
+<ParamField path="ASSET_MEASUREMENT_WORKER_RUN_ONCE" type="boolean" default="false">
+  Execute a single worker cycle then exit (useful for testing).
+</ParamField>
+
+<ParamField path="ASSET_MEASUREMENT_WORKER_SECRET" type="string">
+  Optional secret for securing asset measurement worker API endpoints.
+</ParamField>
+
+## Export Limits
+
+These variables control the maximum number of records that can be exported in a single operation.
+
+<ParamField path="USERS_EXPORT_MAX_LIMIT" type="number" default="10000">
+  Maximum records for user exports.
+</ParamField>
+
+<ParamField path="ORGANIZATIONS_EXPORT_MAX_LIMIT" type="number" default="5000">
+  Maximum records for organization exports.
+</ParamField>
+
+<ParamField path="ROLES_EXPORT_MAX_LIMIT" type="number" default="1000">
+  Maximum records for role exports.
+</ParamField>
+
+<ParamField path="FOREST_PATRIMONY_EXPORT_MAX_LIMIT" type="number" default="10000">
+  Maximum records for forest patrimony exports.
+</ParamField>
+
+<ParamField path="FOREST_BIOLOGICAL_ASSET_EXPORT_MAX_LIMIT" type="number" default="10000">
+  Maximum records for biological asset exports.
+</ParamField>
+
+<ParamField path="FOREST_CONFIG_EXPORT_MAX_LIMIT" type="number" default="5000">
+  Maximum records for forest configuration exports.
+</ParamField>
+
+<ParamField path="GENERAL_CONFIG_EXPORT_MAX_LIMIT" type="number" default="1000">
+  Maximum records for general configuration exports.
+</ParamField>
+
+<ParamField path="MEASUREMENT_CAMPAIGNS_EXPORT_MAX_LIMIT" type="number" default="5000">
+  Maximum records for measurement campaign exports.
+</ParamField>
+
+<ParamField path="MEASUREMENT_OBSERVATIONS_EXPORT_MAX_LIMIT" type="number" default="50000">
+  Maximum records for measurement observation exports.
+</ParamField>
+
+## Example Configuration
+
+<CodeGroup>
+```bash Development (.env)
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/app_dev?schema=public"
+
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="generate-with-openssl-rand-base64-32"
+
+NODE_ENV="development"
+
+# Geo Worker
+GEO_WORKER_INTERVAL_MS="5000"
+GEO_IMPORT_BATCH_SIZE="5"
+GEO_RECALC_BATCH_SIZE="10"
+GEO_VARIATION_BATCH_SIZE="5"
+
+# Asset Measurement Worker
+ASSET_MEASUREMENT_WORKER_INTERVAL_MS="5000"
+ASSET_MEASUREMENT_WORKER_BATCH_SIZE="10"
+
+# Export Limits
+USERS_EXPORT_MAX_LIMIT="10000"
+FOREST_PATRIMONY_EXPORT_MAX_LIMIT="10000"
+FOREST_BIOLOGICAL_ASSET_EXPORT_MAX_LIMIT="10000"
+```
+
+```bash Production (.env)
+DATABASE_URL="postgresql://prod_user:strong_password@db.example.com:5432/smyeg_prod?schema=public"
+
+NEXTAUTH_URL="https://smyeg.example.com"
+NEXTAUTH_SECRET="your-production-secret-key"
+
+NODE_ENV="production"
+
+# Geo Worker (optimized for production)
+GEO_WORKER_INTERVAL_MS="4000"
+GEO_IMPORT_BATCH_SIZE="20"
+GEO_RECALC_BATCH_SIZE="50"
+GEO_VARIATION_BATCH_SIZE="10"
+GEO_WORKER_SECRET="worker-secret-key"
+
+# Asset Measurement Worker
+ASSET_MEASUREMENT_WORKER_INTERVAL_MS="5000"
+ASSET_MEASUREMENT_WORKER_BATCH_SIZE="20"
+ASSET_MEASUREMENT_WORKER_SECRET="asset-worker-secret"
+
+# Export Limits
+USERS_EXPORT_MAX_LIMIT="10000"
+ORGANIZATIONS_EXPORT_MAX_LIMIT="5000"
+FOREST_PATRIMONY_EXPORT_MAX_LIMIT="10000"
+MEASUREMENT_OBSERVATIONS_EXPORT_MAX_LIMIT="50000"
+```
+</CodeGroup>
+
+<Warning>
+  Never commit `.env` files to version control. Add `.env` to your `.gitignore` file.
+</Warning>
+
+## Security Best Practices
+
+<Steps>
+  <Step title="Generate Strong Secrets">
+    Use cryptographically secure random strings for all secret keys:
+    ```bash
+    openssl rand -base64 32
+    ```
+  </Step>
+  
+  <Step title="Restrict Database Access">
+    Use database users with minimal required permissions. Avoid using superuser accounts.
+  </Step>
+  
+  <Step title="Use Different Secrets Per Environment">
+    Never reuse production secrets in development or staging environments.
+  </Step>
+  
+  <Step title="Secure Worker Endpoints">
+    Set `GEO_WORKER_SECRET` and `ASSET_MEASUREMENT_WORKER_SECRET` in production to prevent unauthorized access.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Database Connection Errors
+
+If you encounter connection errors:
+
+1. Verify the database is running: `docker compose ps`
+2. Test connection manually: `psql $DATABASE_URL`
+3. Check firewall rules and network connectivity
+4. Ensure the database name exists
+
+### NextAuth Errors
+
+If authentication fails:
+
+1. Verify `NEXTAUTH_URL` matches your actual URL
+2. Ensure `NEXTAUTH_SECRET` is set and at least 32 characters
+3. Check browser console for CORS errors
+
+### Worker Not Processing Jobs
+
+If workers aren't processing jobs:
+
+1. Check `NODE_ENV` is set correctly
+2. Verify batch size settings aren't too low
+3. Review worker logs for errors
+4. Ensure database connectivity from worker process

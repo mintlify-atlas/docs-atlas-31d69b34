@@ -1,0 +1,411 @@
+---
+title: 'Land Accounting'
+description: 'Track land use variations and patrimonial value changes for Level 4 units'
+---
+
+## Overview
+
+The Land Accounting API tracks patrimonial variations resulting from land use changes at Level 4 units. Each variation records:
+
+- **Land Use Transition**: Previous → New land use classification
+- **Area**: Affected area in hectares
+- **Valuation**: Reference values before/after, total values, patrimonial delta (USD)
+- **Classification**: Kind (INCREMENTO, DECREMENTO, SIN_CAMBIO)
+- **Workflow**: Status (PENDIENTE, PROCESADA, ANULADA)
+
+Variations are typically generated automatically during geo import operations or can be triggered by land use changes.
+
+## Get Land Variations
+
+<CodeGroup>
+```bash GET /api/forest/land-accounting/variations
+curl -X GET "https://api.smyeg.com/api/forest/land-accounting/variations?status=PENDIENTE&page=1&limit=25" \
+  -H "Authorization: Bearer {token}"
+```
+</CodeGroup>
+
+### Query Parameters
+
+<ParamField query="page" type="number" default="1">
+  Page number for pagination
+</ParamField>
+
+<ParamField query="limit" type="number" default="25">
+  Items per page (max 100)
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by status: `PENDIENTE`, `PROCESADA`, or `ANULADA`
+</ParamField>
+
+<ParamField query="level4Id" type="string">
+  Filter by Level 4 unit UUID
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search by land use names or Level 4 code/name (case-insensitive)
+</ParamField>
+
+<ParamField query="fromDate" type="string">
+  Filter variations from this date (ISO 8601 or YYYY-MM-DD)
+</ParamField>
+
+<ParamField query="toDate" type="string">
+  Filter variations up to this date (ISO 8601 or YYYY-MM-DD)
+</ParamField>
+
+### Response
+
+<ResponseField name="items" type="array">
+  Array of land patrimonial variations
+  
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Unique identifier (UUID)
+    </ResponseField>
+    
+    <ResponseField name="organizationId" type="string">
+      Organization UUID
+    </ResponseField>
+    
+    <ResponseField name="level4Id" type="string">
+      Level 4 unit UUID
+    </ResponseField>
+    
+    <ResponseField name="previousLandUseName" type="string">
+      Previous land use classification (null for new units)
+    </ResponseField>
+    
+    <ResponseField name="newLandUseName" type="string">
+      New land use classification
+    </ResponseField>
+    
+    <ResponseField name="affectedAreaHa" type="number">
+      Affected area in hectares (up to 4 decimals)
+    </ResponseField>
+    
+    <ResponseField name="referenceValueBeforeUsd" type="number">
+      Reference value per hectare before change (USD)
+    </ResponseField>
+    
+    <ResponseField name="referenceValueAfterUsd" type="number">
+      Reference value per hectare after change (USD)
+    </ResponseField>
+    
+    <ResponseField name="totalValueBeforeUsd" type="number">
+      Total value before change (USD)
+    </ResponseField>
+    
+    <ResponseField name="totalValueAfterUsd" type="number">
+      Total value after change (USD)
+    </ResponseField>
+    
+    <ResponseField name="patrimonialDeltaUsd" type="number">
+      Net change in patrimonial value (USD)
+    </ResponseField>
+    
+    <ResponseField name="kind" type="string">
+      Variation kind: `INCREMENTO`, `DECREMENTO`, or `SIN_CAMBIO`
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Workflow status: `PENDIENTE`, `PROCESADA`, or `ANULADA`
+    </ResponseField>
+    
+    <ResponseField name="variationDate" type="string">
+      ISO 8601 date when variation occurred
+    </ResponseField>
+    
+    <ResponseField name="notes" type="string">
+      Observations or notes
+    </ResponseField>
+    
+    <ResponseField name="processedAt" type="string">
+      ISO 8601 timestamp when processed (if applicable)
+    </ResponseField>
+    
+    <ResponseField name="createdById" type="string">
+      UUID of user who created the variation
+    </ResponseField>
+    
+    <ResponseField name="processedById" type="string">
+      UUID of user who processed the variation
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    
+    <ResponseField name="level4" type="object">
+      Level 4 unit details with full hierarchy
+      
+      <Expandable title="properties">
+        <ResponseField name="id" type="string">UUID</ResponseField>
+        <ResponseField name="code" type="string">Code</ResponseField>
+        <ResponseField name="name" type="string">Name</ResponseField>
+        
+        <ResponseField name="level3" type="object">
+          Level 3 parent
+          
+          <Expandable title="properties">
+            <ResponseField name="id" type="string">UUID</ResponseField>
+            <ResponseField name="code" type="string">Code</ResponseField>
+            <ResponseField name="name" type="string">Name</ResponseField>
+            
+            <ResponseField name="level2" type="object">
+              Level 2 parent
+              
+              <Expandable title="properties">
+                <ResponseField name="id" type="string">UUID</ResponseField>
+                <ResponseField name="code" type="string">Code</ResponseField>
+                <ResponseField name="name" type="string">Name</ResponseField>
+              </Expandable>
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="createdBy" type="object">
+      User who created the variation
+      
+      <Expandable title="properties">
+        <ResponseField name="id" type="string">UUID</ResponseField>
+        <ResponseField name="email" type="string">Email</ResponseField>
+        <ResponseField name="firstName" type="string">First name</ResponseField>
+        <ResponseField name="lastName" type="string">Last name</ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="processedBy" type="object">
+      User who processed the variation (if applicable)
+      
+      <Expandable title="properties">
+        <ResponseField name="id" type="string">UUID</ResponseField>
+        <ResponseField name="email" type="string">Email</ResponseField>
+        <ResponseField name="firstName" type="string">First name</ResponseField>
+        <ResponseField name="lastName" type="string">Last name</ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  <Expandable title="properties">
+    <ResponseField name="total" type="number">Total records</ResponseField>
+    <ResponseField name="page" type="number">Current page</ResponseField>
+    <ResponseField name="limit" type="number">Items per page</ResponseField>
+    <ResponseField name="totalPages" type="number">Total pages</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "items": [
+    {
+      "id": "aa0e8400-e29b-41d4-a716-446655440000",
+      "organizationId": "660e8400-e29b-41d4-a716-446655440000",
+      "level4Id": "550e8400-e29b-41d4-a716-446655440000",
+      "previousLandUseName": "PASTIZAL",
+      "newLandUseName": "BOSQUE PLANTADO",
+      "affectedAreaHa": 120.5000,
+      "referenceValueBeforeUsd": 1500.00,
+      "referenceValueAfterUsd": 5000.00,
+      "totalValueBeforeUsd": 180750.00,
+      "totalValueAfterUsd": 602500.00,
+      "patrimonialDeltaUsd": 421750.00,
+      "kind": "INCREMENTO",
+      "status": "PENDIENTE",
+      "variationDate": "2024-03-15T00:00:00.000Z",
+      "notes": "GIS update Q1 2024 - Reforestation project",
+      "processedAt": null,
+      "createdById": "440e8400-e29b-41d4-a716-446655440000",
+      "processedById": null,
+      "createdAt": "2024-03-15T10:31:42.000Z",
+      "updatedAt": "2024-03-15T10:31:42.000Z",
+      "level4": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "code": "N4-001",
+        "name": "Rodal Principal",
+        "level3": {
+          "id": "450e8400-e29b-41d4-a716-446655440000",
+          "code": "N3-001",
+          "name": "Bloque Norte",
+          "level2": {
+            "id": "350e8400-e29b-41d4-a716-446655440000",
+            "code": "N2-001",
+            "name": "Finca El Pinar"
+          }
+        }
+      },
+      "createdBy": {
+        "id": "440e8400-e29b-41d4-a716-446655440000",
+        "email": "admin@example.com",
+        "firstName": "Carlos",
+        "lastName": "González"
+      },
+      "processedBy": null
+    }
+  ],
+  "pagination": {
+    "total": 1,
+    "page": 1,
+    "limit": 25,
+    "totalPages": 1
+  }
+}
+```
+</ResponseExample>
+
+<Note>
+  The API automatically filters out records where `previousLandUseName` equals `newLandUseName` (no actual change).
+</Note>
+
+## Create Land Variation
+
+<CodeGroup>
+```bash POST /api/forest/land-accounting/variations
+curl -X POST "https://api.smyeg.com/api/forest/land-accounting/variations" \
+  -H "Authorization: Bearer {token}" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+</CodeGroup>
+
+<Warning>
+  Direct creation is **not supported** (returns 405 Method Not Allowed).
+  
+  Land variations are automatically generated from:
+  - Geo import operations (shapefile processing)
+  - Level 4 land use updates via patrimony API
+  - Geo operation jobs (split/merge)
+</Warning>
+
+### Error Response
+
+<ResponseExample>
+```json Response (405 Method Not Allowed)
+{
+  "error": "Las variaciones se generan desde operaciones geoespaciales de Nivel 4."
+}
+```
+</ResponseExample>
+
+## Variation Logic
+
+Variations are created when:
+
+1. **Geo Import**: Shapefile `usoactual` ≠ Level 4 `currentLandUseName`
+2. **Manual Update**: PATCH `/api/forest/patrimony` with changed `currentLandUseName`
+3. **Geo Operations**: Split/merge operations that modify land use
+
+### Calculation Rules
+
+```typescript
+// Area from geometry
+affectedAreaHa = ST_Area(geometry_utm) / 10000
+
+// Values (simplified - actual logic uses valuation tables)
+totalValueBeforeUsd = affectedAreaHa * referenceValueBeforeUsd
+totalValueAfterUsd = affectedAreaHa * referenceValueAfterUsd
+patrimonialDeltaUsd = totalValueAfterUsd - totalValueBeforeUsd
+
+// Kind classification
+if (patrimonialDeltaUsd > 0) kind = "INCREMENTO"
+else if (patrimonialDeltaUsd < 0) kind = "DECREMENTO"
+else kind = "SIN_CAMBIO"
+```
+
+### Status Workflow
+
+<Steps>
+  <Step title="PENDIENTE">
+    Created automatically, awaiting review
+  </Step>
+  
+  <Step title="PROCESADA">
+    Approved and applied to accounting (manual process)
+  </Step>
+  
+  <Step title="ANULADA">
+    Cancelled or rejected (manual process)
+  </Step>
+</Steps>
+
+## Get Single Variation
+
+<CodeGroup>
+```bash GET /api/forest/land-accounting/variations/{id}
+curl -X GET "https://api.smyeg.com/api/forest/land-accounting/variations/aa0e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer {token}"
+```
+</CodeGroup>
+
+Returns detailed information for a single variation including full hierarchy and user details.
+
+## Date Range Filtering
+
+The `fromDate` and `toDate` parameters filter by `variationDate` with inclusive bounds:
+
+- `fromDate`: Sets time to 00:00:00.000
+- `toDate`: Sets time to 23:59:59.999
+
+<CodeGroup>
+```bash Example: Q1 2024 variations
+curl -X GET "https://api.smyeg.com/api/forest/land-accounting/variations?fromDate=2024-01-01&toDate=2024-03-31" \
+  -H "Authorization: Bearer {token}"
+```
+</CodeGroup>
+
+## Reporting
+
+Variations support financial and environmental reporting:
+
+### Financial Impact
+- **Incremental Value**: Sum of `patrimonialDeltaUsd` where `kind = INCREMENTO`
+- **Decremental Value**: Sum of `patrimonialDeltaUsd` where `kind = DECREMENTO`
+- **Net Change**: Total `patrimonialDeltaUsd` across all variations
+
+### Land Use Transition Matrix
+Track transitions between land use types:
+```
+PASTIZAL → BOSQUE PLANTADO: 120.5 ha (+$421,750)
+BOSQUE NATURAL → CONSERVACIÓN: 85.3 ha ($0)
+```
+
+## Integration Points
+
+### Geo Import
+When importing shapefiles via `/api/forest/geo/import`:
+1. Worker processes each feature
+2. Compares `usoactual` (shapefile) vs. `currentLandUseName` (database)
+3. If different, creates variation using `variationDate` and `variationNotes` from job metadata
+4. Updates Level 4 `currentLandUseName` to match shapefile
+
+### Patrimony Updates
+When updating Level 4 via `/api/forest/patrimony`:
+1. Detects `currentLandUseName` change
+2. Creates variation with current date
+3. Uses geometry area from active `forest_geometry_n4` record
+
+## Permissions
+
+Requires:
+- `forest-patrimony:READ` (all users can view variations)
+- `SUPER_ADMIN` role (cross-organization access)
+
+<Note>
+  Processing variations (status changes) requires additional accounting permissions (not covered by this API endpoint).
+</Note>
+
+## Source Reference
+
+Implementation:
+- List: `src/app/api/forest/land-accounting/variations/route.ts:47-169`
+- Single: `src/app/api/forest/land-accounting/variations/[id]/route.ts`
+- Schema: `prisma/schema.prisma:784-813` (LandPatrimonialVariation)

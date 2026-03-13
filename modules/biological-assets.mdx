@@ -1,0 +1,408 @@
+---
+title: Biological Asset Tracking
+description: Track and manage biological assets at Level 6 with comprehensive dendrometric and genetic data
+---
+
+# Biological Asset Tracking
+
+The Biological Assets module tracks forest plantations and biological assets at **Level 6** - the most granular level representing specific genetic materials planted in Level 4 stands.
+
+## Asset Classification
+
+Biological assets are classified by their primary purpose:
+
+```typescript
+enum BiologicalAssetType {
+  COMERCIAL      // Commercial production
+  INVESTIGACION  // Research/experimental
+}
+```
+
+## IMA Classification
+
+**IMA (Incremento Medio Anual)** - Mean Annual Increment - classifies growth potential:
+
+```typescript
+enum ImaClassification {
+  I    // Class I - Highest growth
+  II   // Class II
+  III  // Class III
+  IV   // Class IV
+  V    // Class V - Lowest growth
+}
+```
+
+<Note>
+IMA classes help predict yield and plan harvest rotations. Each organization can define custom IMA ranges per class.
+</Note>
+
+## Biological Asset Level 6
+
+Level 6 assets represent planted genetic material within a Level 4 stand:
+
+```typescript
+type ForestBiologicalAssetLevel6 = {
+  id: string;
+  level4Id: string;                          // Parent Level 4 stand
+  biologicalAssetKey: string;                // Unique key
+  accountingKey?: string;                    // Accounting reference
+  
+  // Establishment Information
+  establishmentDate?: Date;
+  plantingYear?: number;
+  assetType: BiologicalAssetType;
+  
+  // Genetic Material
+  geneticMaterialCode?: string;
+  geneticMaterialName?: string;
+  
+  // Management
+  managementSchemeCode?: string;
+  managementSchemeName?: string;
+  
+  // Inventory Data
+  inventoryCode?: string;
+  inventoryType?: string;
+  inventoryDate?: Date;
+  inventoryAgeYears?: number;
+  level5UnitCount?: number;                   // Sample plots used
+  
+  // Spacing
+  spacingCode?: string;
+  spacingDescription?: string;
+  spacingBetweenRowsM?: number;               // Meters between rows
+  spacingBetweenTreesM?: number;              // Meters between trees
+  treeDensityPerHa?: number;                  // Trees per hectare
+  
+  // Health and Growth
+  survivalRate?: number;                      // Percentage (0-100)
+  dominantHeightM?: number;                   // Dominant height in meters
+  meanHeightM?: number;                       // Mean height in meters
+  quadraticDiameterM?: number;                // Quadratic mean diameter
+  basalAreaM2?: number;                       // Basal area in m²
+  
+  // Volume Calculations
+  unitVolumeM3NoBarkPerHa?: number;          // Volume without bark per ha
+  unitVolumeM3WithBarkPerHa?: number;        // Volume with bark per ha
+  totalVolumeM3NoBark?: number;              // Total volume without bark
+  totalVolumeM3WithBark?: number;            // Total volume with bark
+  adjustedVolumeM3NoBarkPerHa?: number;      // Adjusted volume
+  adjustedVolumeM3WithBarkPerHa?: number;
+  
+  // IMA Classification
+  imaClassCode?: string;
+  imaClassName?: string;
+  
+  // Accounting
+  actualCostUsd?: number;                    // Actual cost in USD
+  
+  isActive: boolean;
+};
+```
+
+## Genetic Material
+
+### Vegetal Material Types
+
+```typescript
+enum VegetalMaterialType {
+  PURA     // Pure genetic line
+  HIBRIDA  // Hybrid
+}
+```
+
+### Plant Types
+
+```typescript
+enum PlantType {
+  PROGENIE   // Progeny (seedling)
+  CLON       // Clone
+  INJERTO    // Graft
+  IN_VITRO   // In vitro culture
+}
+```
+
+### Plant Origin
+
+```typescript
+enum PlantOrigin {
+  NATIVA        // Native species
+  EXOTICA       // Exotic/introduced
+  NATURALIZADA  // Naturalized
+  INTRODUCIDA   // Introduced
+  ENDEMICA      // Endemic
+  CULTIVADA     // Cultivated
+}
+```
+
+## Vegetal Material Registration
+
+Vegetal materials are registered with species and provenance information:
+
+```typescript
+type VegetalMaterial = {
+  id: string;
+  code: string;
+  name: string;
+  speciesId: string;              // Reference to Species catalog
+  materialType: VegetalMaterialType;
+  plantType: PlantType;
+  plantOrigin: PlantOrigin;
+  provenanceId?: string;          // Geographic origin
+  isActive: boolean;
+};
+```
+
+<Accordion title="Species Catalog">
+  Species are registered in a central catalog:
+
+  ```typescript
+  type Species = {
+    id: string;
+    code: string;
+    scientificName: string;       // Binomial nomenclature
+    commonName?: string;
+    genus?: string;
+    family?: string;
+    taxonomicOrder?: string;
+    isActive: boolean;
+  };
+  ```
+</Accordion>
+
+<Accordion title="Provenance Catalog">
+  Provenance tracks geographic origin of genetic material:
+
+  ```typescript
+  type Provenance = {
+    id: string;
+    countryId: string;
+    code: string;
+    name: string;
+    isActive: boolean;
+  };
+  ```
+</Accordion>
+
+## Spacing Configurations
+
+Spacing configurations define tree planting patterns:
+
+```typescript
+type Spacing = {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  betweenRowsM?: number;          // Distance between rows (m)
+  betweenTreesM?: number;         // Distance between trees (m)
+  treeDensityPerHa?: number;      // Calculated density
+  isActive: boolean;
+};
+```
+
+**Example Spacings:**
+- `3x2` → 3 meters between rows, 2 meters between trees
+- `4x3` → 1,666 trees/hectare
+- `6x6` → 277 trees/hectare
+
+## Management Schemes
+
+Management schemes define silvicultural practices:
+
+```typescript
+type ManagementScheme = {
+  id: string;
+  code: string;
+  name: string;                   // e.g., "Intensive Management", "Minimal Intervention"
+  isActive: boolean;
+};
+```
+
+## Inventory Types
+
+Forest inventory types track measurement protocols:
+
+```typescript
+type ForestInventoryTypeCatalog = {
+  id: string;
+  code: string;
+  name: string;                   // e.g., "Pre-operational", "Annual Growth"
+  isActive: boolean;
+};
+```
+
+## IMA Classes
+
+IMA (Mean Annual Increment) classes are configured per organization:
+
+```typescript
+type ImaClass = {
+  id: string;
+  code: string;
+  classification: ImaClassification;  // I, II, III, IV, V
+  name: string;
+  description?: string;
+  rangeMin?: number;                  // Minimum m³/ha/year
+  rangeMax?: number;                  // Maximum m³/ha/year
+  isActive: boolean;
+};
+```
+
+**Example IMA Configuration:**
+
+| Class | Range (m³/ha/year) | Description |
+|-------|-------------------|-------------|
+| I     | 35+               | Excellent growth |
+| II    | 28-35             | Good growth |
+| III   | 20-28             | Average growth |
+| IV    | 12-20             | Below average |
+| V     | < 12              | Poor growth |
+
+## Asset Measurement Campaigns
+
+Biological assets are measured through campaigns (see Audit System for details):
+
+```typescript
+type AssetMeasurementCampaign = {
+  id: string;
+  organizationId: string;
+  level4Id: string;
+  domain: AssetDomain;                  // BIOLOGICO, HIDROLOGICO, etc.
+  protocolType: MeasurementProtocolType;
+  campaignCode: string;
+  campaignName: string;
+  campaignDate: Date;
+  status: AssetCampaignStatus;
+  schemaVersion: string;
+};
+```
+
+### Asset Domains
+
+```typescript
+enum AssetDomain {
+  BIOLOGICO      // Biological measurements
+  HIDROLOGICO    // Hydrological measurements
+  DENDROMETRICO  // Dendrometric measurements
+  DEMOGRAFICO    // Demographic surveys
+}
+```
+
+### Biological Measurement Protocols
+
+```typescript
+enum MeasurementProtocolType {
+  BIO_SOBREVIVENCIA            // Survival assessment
+  BIO_PREOPERATIVO             // Pre-operational inventory
+  BIO_PRECOSECHA               // Pre-harvest assessment
+  BIO_CONTINUO                 // Continuous monitoring
+  BIO_PARCELAS_PERMANENTES     // Permanent sample plots
+  
+  HIDRO_ESTACION_METEOROLOGICA // Weather station
+  HIDRO_ESTACION_HIDROLOGICA   // Hydrological station
+  
+  DENDRO_PARCELA_MULTIPROPOSITO // Multi-purpose plot
+  DENDRO_PARCELA_CARBONO       // Carbon plot
+  
+  DEMO_ENCUESTA_COMUNIDAD      // Community survey
+  DEMO_ENCUESTA_NUCLEO_FAMILIAR // Family survey
+}
+```
+
+## Product Types
+
+Product types define harvest specifications:
+
+```typescript
+type ProductType = {
+  id: string;
+  code: string;
+  name: string;
+  minLengthM?: number;              // Minimum log length
+  maxLengthM?: number;              // Maximum log length
+  minSmallEndDiameterCm?: number;   // Min small-end diameter
+  maxSmallEndDiameterCm?: number;   // Max small-end diameter
+  recommendedHarvestType: RecommendedHarvestType;
+  isActive: boolean;
+};
+
+enum RecommendedHarvestType {
+  MECANIZADA  // Mechanized harvest
+  MANUAL      // Manual harvest
+}
+```
+
+## Configuration APIs
+
+<Accordion title="Vegetal Materials">
+  **GET** `/api/forest/config/vegetal-materials`
+  
+  **POST** `/api/forest/config/vegetal-materials`
+  
+  Query parameters: `page`, `limit`, `search`
+</Accordion>
+
+<Accordion title="Species Catalog">
+  **GET** `/api/forest/config/species`
+  
+  **POST** `/api/forest/config/species`
+  
+  Query parameters: `page`, `limit`, `search`
+</Accordion>
+
+<Accordion title="Spacings">
+  **GET** `/api/forest/config/spacings`
+  
+  **POST** `/api/forest/config/spacings`
+  
+  Query parameters: `page`, `limit`, `search`
+</Accordion>
+
+<Accordion title="Management Schemes">
+  **GET** `/api/forest/config/management-schemes`
+  
+  **POST** `/api/forest/config/management-schemes`
+</Accordion>
+
+<Accordion title="IMA Classes">
+  IMA classes are configured in the database per organization. Contact your system administrator to set up IMA classification ranges.
+</Accordion>
+
+## Code Example
+
+```typescript
+// Fetch biological assets for a Level 4 stand
+const level4Id = 'uuid-here';
+
+// Note: Level 6 assets are typically created through
+// measurement campaigns and calculation jobs
+
+// Fetch species catalog
+const speciesResponse = await fetch(
+  '/api/forest/config/species?page=1&limit=100'
+);
+const species = await speciesResponse.json();
+
+// Create vegetal material
+const materialResponse = await fetch(
+  '/api/forest/config/vegetal-materials',
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      code: 'VM001',
+      name: 'Pinus caribaea - Clon Elite',
+      speciesId: 'species-uuid',
+      materialType: 'PURA',
+      plantType: 'CLON',
+      plantOrigin: 'INTRODUCIDA',
+      provenanceId: 'provenance-uuid'
+    })
+  }
+);
+```
+
+<Note>
+Biological assets at Level 6 are typically generated automatically through measurement campaigns and calculation protocols. Manual creation is rare.
+</Note>

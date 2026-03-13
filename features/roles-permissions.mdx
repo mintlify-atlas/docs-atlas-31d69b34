@@ -1,0 +1,456 @@
+---
+title: "Roles & Permissions"
+description: "Fine-grained RBAC system with module-based permissions and CASL integration"
+---
+
+## Overview
+
+SMyEG implements a **comprehensive Role-Based Access Control (RBAC)** system with:
+
+- Module-based permission structure
+- Action-level granularity (CREATE, READ, UPDATE, DELETE, ADMIN)
+- CASL integration for declarative authorization
+- Organization-scoped and system-wide roles
+
+## Permission Structure
+
+Permissions follow a **module:action** format:
+
+```
+<moduleSlug>:<action>
+```
+
+Examples:
+- `users:READ`
+- `forest-patrimony:CREATE`
+- `organizations:ADMIN`
+
+### Permission Actions
+
+<ParamField path="CREATE" type="action">
+  Allows creating new records in the module
+</ParamField>
+
+<ParamField path="READ" type="action">
+  Allows viewing/listing records in the module
+</ParamField>
+
+<ParamField path="UPDATE" type="action">
+  Allows modifying existing records
+</ParamField>
+
+<ParamField path="DELETE" type="action">
+  Allows removing records
+</ParamField>
+
+<ParamField path="ADMIN" type="action">
+  Grants full access to the module (all actions)
+</ParamField>
+
+<ParamField path="EXPORT" type="action">
+  Allows exporting data from the module
+</ParamField>
+
+## Role Types
+
+### System Roles
+
+System roles are predefined in `src/lib/rbac.ts`:
+
+```typescript src/lib/rbac.ts
+export const APP_ROLES = [
+  "SUPER_ADMIN", 
+  "ADMIN", 
+  "CONTADOR", 
+  "GERENTE_CAMPO", 
+  "USER"
+] as const;
+
+export type AppRole = (typeof APP_ROLES)[number];
+```
+
+<CardGroup cols={2}>
+  <Card title="SUPER_ADMIN" icon="crown">
+    Full system access across all organizations and modules.
+  </Card>
+  
+  <Card title="ADMIN" icon="user-shield">
+    Organization-level admin with comprehensive module access.
+  </Card>
+  
+  <Card title="GERENTE_CAMPO" icon="users">
+    Field manager with read access to forest patrimony and user management.
+  </Card>
+  
+  <Card title="CONTADOR" icon="calculator">
+    Accountant with read-only access to forest patrimony.
+  </Card>
+  
+  <Card title="USER" icon="user">
+    Basic user with dashboard access only.
+  </Card>
+</CardGroup>
+
+### Role-Based Permissions
+
+The `getRolePermissions` function returns permissions for each role:
+
+```typescript src/lib/rbac.ts
+export function getRolePermissions(role: AppRole | null) {
+  if (!role) return [];
+
+  if (role === "ADMIN") {
+    return [
+      "dashboard:READ",
+      "forest-patrimony:READ",
+      "forest-patrimony:CREATE",
+      "forest-patrimony:UPDATE",
+      "forest-patrimony:DELETE",
+      "forest-biological-asset:READ",
+      "asset-measurement:READ",
+      "asset-measurement:CREATE",
+      "asset-measurement:UPDATE",
+      "settings:READ",
+      "settings:UPDATE",
+      "users:READ",
+      "users:CREATE",
+      "users:UPDATE",
+      "users:DELETE",
+    ];
+  }
+
+  if (role === "SUPER_ADMIN") {
+    return [
+      "dashboard:READ",
+      "users:ADMIN",
+      "organizations:ADMIN",
+      "forest-patrimony:ADMIN",
+      "forest-biological-asset:ADMIN",
+      "asset-measurement:ADMIN",
+      "forest-config:ADMIN",
+      "general-config:ADMIN",
+      "profile:ADMIN",
+      "analytics:ADMIN",
+      "settings:ADMIN",
+      "audit:ADMIN"
+    ];
+  }
+
+  // Other roles...
+}
+```
+
+## Fetching User Permissions
+
+The `getUserRolesAndPermissions` function loads a user's complete permission set:
+
+```typescript src/lib/permissions.ts
+export async function getUserRolesAndPermissions(userId: string) {
+  const roleAssignments = await prisma.userRole.findMany({
+    where: { userId, isActive: true },
+    include: {
+      role: {
+        include: {
+          rolePermissions: {
+            include: {
+              permission: {
+                include: { module: true }
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  const roles = roleAssignments.map((assignment) => assignment.role.slug);
+  const permissions = roleAssignments.flatMap((assignment) =>
+    assignment.role.rolePermissions.map(
+      (rp) => `${rp.permission.module.slug}:${rp.permission.action}`
+    )
+  );
+
+  return {
+    roles,
+    permissions: Array.from(new Set(permissions))
+  };
+}
+```
+
+<Note>
+  Permissions from multiple role assignments are automatically merged and deduplicated.
+</Note>
+
+## Permission Checking
+
+### Server-Side Check
+
+Use `hasPermission` for simple permission checks:
+
+```typescript src/lib/permissions.ts
+export function hasPermission(
+  permissions: string[], 
+  moduleSlug: string, 
+  action: string
+) {
+  return (
+    permissions.includes(`${moduleSlug}:${action}`) || 
+    permissions.includes(`${moduleSlug}:ADMIN`)
+  );
+}
+```
+
+Example usage:
+
+```typescript
+const session = await auth();
+const { permissions } = await getUserRolesAndPermissions(session.user.id);
+
+if (!hasPermission(permissions, "users", "CREATE")) {
+  return { error: "Unauthorized" };
+}
+```
+
+### CASL Integration
+
+For complex authorization logic, use CASL abilities:
+
+```typescript src/lib/ability.ts
+import { AbilityBuilder, AbilityClass, PureAbility } from "@casl/ability";
+
+export type AppAction = "manage" | "create" | "read" | "update" | "delete";
+export type AppSubject = string;
+export type AppAbility = PureAbility<[AppAction, AppSubject]>;
+
+const actionMap: Record<string, AppAction> = {
+  CREATE: "create",
+  READ: "read",
+  UPDATE: "update",
+  DELETE: "delete",
+  ADMIN: "manage"
+};
+
+export function buildAbilityFromPermissions(permissions: string[]) {
+  const { can, build } = new AbilityBuilder<AppAbility>(
+    PureAbility as AbilityClass<AppAbility>
+  );
+
+  for (const entry of permissions) {
+    const [moduleSlug, actionRaw] = entry.split(":");
+    const action = actionMap[actionRaw] ?? "read";
+    if (moduleSlug) {
+      can(action, moduleSlug);
+    }
+  }
+
+  return build();
+}
+```
+
+#### Using CASL Abilities
+
+```typescript src/app/(dashboard)/organizaciones/page.tsx
+const session = await auth();
+if (!session?.user?.id) {
+  redirect("/login");
+}
+
+const livePermissionInfo = await getUserRolesAndPermissions(session.user.id);
+const ability = buildAbilityFromPermissions(
+  livePermissionInfo?.permissions ?? []
+);
+
+if (!ability.can("read", "organizations")) {
+  redirect("/unauthorized");
+}
+
+// User is authorized to read organizations
+```
+
+<CodeGroup>
+```typescript Check Create Permission
+if (ability.can("create", "users")) {
+  // Allow user creation
+}
+```
+
+```typescript Check Manage Permission
+if (ability.can("manage", "settings")) {
+  // Full access to settings
+}
+```
+
+```typescript Check Multiple Subjects
+if (ability.can("read", "forest-patrimony") && 
+    ability.can("update", "forest-patrimony")) {
+  // Can read and update forest patrimony
+}
+```
+</CodeGroup>
+
+## Role Management Interface
+
+The roles management page (`/roles`) provides a comprehensive interface for managing roles and permissions:
+
+### Features
+
+- **CRUD Operations**: Create, update, and delete custom roles
+- **Permission Matrix**: Visual permission assignment by module
+- **Bulk Actions**: Select and delete multiple roles
+- **Organization Scoping**: Roles can be scoped to specific organizations
+- **System Role Protection**: System roles cannot be deleted
+
+### Permission Assignment UI
+
+The UI groups permissions by module with action-level checkboxes:
+
+```typescript src/app/(dashboard)/roles/page.tsx
+{modules.map((moduleItem) => {
+  const actionMap = new Map(
+    moduleItem.actions.map((actionItem) => 
+      [actionItem.action, actionItem.permissionId]
+    )
+  );
+
+  return (
+    <div key={moduleItem.id}>
+      <h3>{moduleItem.name}</h3>
+      <label>
+        <input
+          type="checkbox"
+          checked={isCrudChecked}
+          onChange={(e) => toggleModuleCrud(moduleItem, e.target.checked)}
+        />
+        CRUD completo
+      </label>
+      
+      {orderedActions.map((action) => {
+        const permissionId = actionMap.get(action);
+        return (
+          <label key={action}>
+            <input
+              type="checkbox"
+              checked={selectedPermissionSet.has(permissionId)}
+              onChange={(e) => 
+                togglePermission(permissionId, e.target.checked)
+              }
+            />
+            {action}
+          </label>
+        );
+      })}
+    </div>
+  );
+})}
+```
+
+## Helper Functions
+
+### Access Level Checks
+
+```typescript src/lib/rbac.ts
+export function canAccessOrganizations(role: AppRole | null) {
+  return role === "ADMIN" || role === "SUPER_ADMIN";
+}
+
+export function canAccessUsers(role: AppRole | null) {
+  return role === "ADMIN" || 
+         role === "SUPER_ADMIN" || 
+         role === "GERENTE_CAMPO";
+}
+```
+
+### Role Normalization
+
+```typescript src/lib/rbac.ts
+export function normalizeRole(value: string | null | undefined): AppRole | null {
+  if (!value) return null;
+  const normalized = value.trim().toUpperCase();
+  return APP_ROLES.includes(normalized as AppRole) 
+    ? (normalized as AppRole) 
+    : null;
+}
+```
+
+### Email-Based Role Inference
+
+```typescript src/lib/rbac.ts
+export function inferRoleFromEmail(email: string): AppRole {
+  const normalized = email.trim().toLowerCase();
+  if (normalized.includes("admin")) return "ADMIN";
+  if (normalized.includes("gerente")) return "GERENTE_CAMPO";
+  if (normalized.includes("contador")) return "CONTADOR";
+  return "USER";
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Check Permissions on Every Request">
+    Always verify permissions at the API route or page level, never rely solely on UI hiding:
+    
+    ```typescript
+    const session = await auth();
+    const { permissions } = await getUserRolesAndPermissions(session.user.id);
+    
+    if (!hasPermission(permissions, "users", "DELETE")) {
+      return { error: "Unauthorized" };
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Use ADMIN for Full Module Access">
+    The `ADMIN` action grants full access to a module, so check for either specific actions or ADMIN:
+    
+    ```typescript
+    if (ability.can("delete", "users") || ability.can("manage", "users")) {
+      // User can delete
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Combine with Organization Isolation">
+    Always combine permission checks with organization filtering:
+    
+    ```typescript
+    if (!ability.can("read", "forest-patrimony")) {
+      return { error: "Unauthorized" };
+    }
+    
+    const data = await prisma.forestPatrimony.findMany({
+      where: { organizationId: session.user.organizationId }
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Refresh Permissions After Role Changes">
+    When updating user roles, ensure the user re-authenticates or refresh their session to get updated permissions.
+  </Accordion>
+</AccordionGroup>
+
+## Client-Side Permission Checks
+
+For UI conditional rendering:
+
+```typescript
+"use client";
+
+import { useSession } from "next-auth/react";
+
+export function ActionButton() {
+  const { data: session } = useSession();
+  const permissions = session?.user?.permissions ?? [];
+  
+  const canCreate = permissions.includes("users:CREATE") || 
+                    permissions.includes("users:ADMIN");
+  
+  if (!canCreate) return null;
+  
+  return <button>Create User</button>;
+}
+```
+
+<Warning>
+  Client-side permission checks are for UX only. Always enforce permissions on the server.
+</Warning>

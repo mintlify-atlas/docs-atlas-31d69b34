@@ -1,0 +1,416 @@
+---
+title: 'Geo Import'
+description: 'Import shapefiles for Level 4 geometry with job status tracking and validation'
+---
+
+## Overview
+
+The Geo Import API processes shapefile uploads (.zip containing .shp, .shx, .dbf, .prj) to create or update Level 4 unit geometries. The API uses a background worker pattern:
+
+1. **Upload**: Submit shapefile ZIP and metadata
+2. **Job Creation**: Receive job ID (status: PENDING)
+3. **Background Processing**: Worker extracts, validates, and imports features
+4. **Status Tracking**: Poll job status and view detailed item results
+
+### Job Status Flow
+
+```
+PENDING → EXTRACTING → VALIDATING → PROCESSING → COMPLETED/FAILED
+```
+
+## Get Template
+
+<CodeGroup>
+```bash GET /api/forest/geo/import
+curl -X GET "https://api.smyeg.com/api/forest/geo/import?format=xlsx" \
+  -H "Authorization: Bearer {token}"
+```
+</CodeGroup>
+
+Download import template with sample data structure.
+
+### Query Parameters
+
+<ParamField query="format" type="string" default="csv">
+  Template format: `csv` or `xlsx`
+</ParamField>
+
+### Response
+
+Returns file download with headers:
+- `nivel2`: Level 2 code
+- `nivel3`: Level 3 code
+- `nivel4`: Level 4 code
+- `usoactual`: Current land use
+- `usoanterior`: Previous land use
+- `fechavariacion`: Variation date (YYYY-MM-DD)
+- `observaciones`: Observations
+
+## Upload Shapefile
+
+<CodeGroup>
+```bash POST /api/forest/geo/import
+curl -X POST "https://api.smyeg.com/api/forest/geo/import" \
+  -H "Authorization: Bearer {token}" \
+  -F "file=@nivel4_geometries.zip" \
+  -F "variationDate=2024-03-15" \
+  -F "variationNotes=GIS update Q1 2024"
+```
+</CodeGroup>
+
+### Body Parameters (multipart/form-data)
+
+<ParamField body="file" type="file" required>
+  ZIP file containing shapefile components (.shp, .shx, .dbf, .prj)
+</ParamField>
+
+<ParamField body="variationDate" type="string">
+  ISO 8601 date or YYYY-MM-DD format. Used as default for land use variations.
+</ParamField>
+
+<ParamField body="variationNotes" type="string">
+  Default notes for land use variations generated during import
+</ParamField>
+
+### Response
+
+<ResponseField name="jobId" type="string">
+  UUID of the created import job
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Initial job status (always `PENDING`)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Status message
+</ResponseField>
+
+<ResponseExample>
+```json Response (202 Accepted)
+{
+  "jobId": "880e8400-e29b-41d4-a716-446655440000",
+  "status": "PENDING",
+  "message": "Archivo recibido. El worker procesará la importación en segundo plano."
+}
+```
+</ResponseExample>
+
+<Note>
+  The ZIP file must contain all required shapefile components:
+  - `.shp` (geometry)
+  - `.shx` (shape index)
+  - `.dbf` (attribute data)
+  - `.prj` (projection)
+  
+  Missing files will result in a 400 error.
+</Note>
+
+## Get Job Status
+
+<CodeGroup>
+```bash GET /api/forest/geo/import/{jobId}
+curl -X GET "https://api.smyeg.com/api/forest/geo/import/880e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer {token}"
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="jobId" type="string" required>
+  UUID of the import job
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Job UUID
+</ResponseField>
+
+<ResponseField name="organizationId" type="string">
+  Organization UUID
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Job status enum: `PENDING`, `EXTRACTING`, `VALIDATING`, `PROCESSING`, `COMPLETED`, `FAILED`
+</ResponseField>
+
+<ResponseField name="fileName" type="string">
+  Original uploaded filename
+</ResponseField>
+
+<ResponseField name="storagePath" type="string">
+  Server storage path
+</ResponseField>
+
+<ResponseField name="totalRecords" type="number">
+  Total features in shapefile
+</ResponseField>
+
+<ResponseField name="processedRecords" type="number">
+  Successfully processed features
+</ResponseField>
+
+<ResponseField name="failedRecords" type="number">
+  Failed features
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Job metadata including variation defaults
+  
+  <Expandable title="properties">
+    <ResponseField name="requiredExtensions" type="array">
+      Array of required file extensions
+    </ResponseField>
+    
+    <ResponseField name="variationDefaults" type="object">
+      Default values for land use variations
+      
+      <Expandable title="properties">
+        <ResponseField name="variationDate" type="string">
+          ISO 8601 date
+        </ResponseField>
+        <ResponseField name="variationNotes" type="string">
+          Default notes
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="errorMessage" type="string">
+  Error details if status is `FAILED`
+</ResponseField>
+
+<ResponseField name="startedAt" type="string">
+  ISO 8601 timestamp when processing started
+</ResponseField>
+
+<ResponseField name="completedAt" type="string">
+  ISO 8601 timestamp when processing completed
+</ResponseField>
+
+<ResponseField name="createdById" type="string">
+  UUID of user who created the job
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp
+</ResponseField>
+
+<ResponseField name="items" type="array">
+  Array of import job items (first 100)
+  
+  <Expandable title="item properties">
+    <ResponseField name="id" type="string">
+      Item UUID
+    </ResponseField>
+    
+    <ResponseField name="jobId" type="string">
+      Parent job UUID
+    </ResponseField>
+    
+    <ResponseField name="featureIndex" type="number">
+      Zero-based index in shapefile
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Item status: `PROCESSED` or `FAILED`
+    </ResponseField>
+    
+    <ResponseField name="level2Code" type="string">
+      Extracted Level 2 code
+    </ResponseField>
+    
+    <ResponseField name="level3Code" type="string">
+      Extracted Level 3 code
+    </ResponseField>
+    
+    <ResponseField name="level4Code" type="string">
+      Extracted Level 4 code
+    </ResponseField>
+    
+    <ResponseField name="message" type="string">
+      Success or error message
+    </ResponseField>
+    
+    <ResponseField name="rawProperties" type="object">
+      Original shapefile attributes (JSON)
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "id": "880e8400-e29b-41d4-a716-446655440000",
+  "organizationId": "660e8400-e29b-41d4-a716-446655440000",
+  "status": "COMPLETED",
+  "fileName": "nivel4_geometries.zip",
+  "storagePath": "/uploads/geo-imports/880e8400-e29b-41d4-a716-446655440000.zip",
+  "totalRecords": 3,
+  "processedRecords": 3,
+  "failedRecords": 0,
+  "metadata": {
+    "requiredExtensions": [".shp", ".shx", ".dbf", ".prj"],
+    "variationDefaults": {
+      "variationDate": "2024-03-15T00:00:00.000Z",
+      "variationNotes": "GIS update Q1 2024"
+    }
+  },
+  "errorMessage": null,
+  "startedAt": "2024-03-15T10:30:15.000Z",
+  "completedAt": "2024-03-15T10:31:42.000Z",
+  "createdById": "440e8400-e29b-41d4-a716-446655440000",
+  "createdAt": "2024-03-15T10:30:00.000Z",
+  "updatedAt": "2024-03-15T10:31:42.000Z",
+  "items": [
+    {
+      "id": "990e8400-e29b-41d4-a716-446655440001",
+      "jobId": "880e8400-e29b-41d4-a716-446655440000",
+      "featureIndex": 0,
+      "status": "PROCESSED",
+      "level2Code": "N2-001",
+      "level3Code": "N3-001",
+      "level4Code": "N4-001",
+      "message": "Geometría actualizada correctamente",
+      "rawProperties": {
+        "nivel2": "N2-001",
+        "nivel3": "N3-001",
+        "nivel4": "N4-001",
+        "usoactual": "BOSQUE PLANTADO",
+        "usoanterior": "PASTIZAL",
+        "superficie": 120.5
+      },
+      "createdAt": "2024-03-15T10:30:45.000Z"
+    },
+    {
+      "id": "990e8400-e29b-41d4-a716-446655440002",
+      "jobId": "880e8400-e29b-41d4-a716-446655440000",
+      "featureIndex": 1,
+      "status": "FAILED",
+      "level2Code": "N2-001",
+      "level3Code": "N3-002",
+      "level4Code": "N4-999",
+      "message": "Nivel 4 no encontrado: N4-999",
+      "rawProperties": {
+        "nivel2": "N2-001",
+        "nivel3": "N3-002",
+        "nivel4": "N4-999"
+      },
+      "createdAt": "2024-03-15T10:31:12.000Z"
+    }
+  ]
+}
+```
+</ResponseExample>
+
+## Validation Rules
+
+The geo import worker validates each feature:
+
+### Required Fields
+- `nivel2`: Must match existing Level 2 code
+- `nivel3`: Must match existing Level 3 code under Level 2
+- `nivel4`: Must match existing Level 4 code under Level 3
+
+### Geometry Validation
+- Must be valid MultiPolygon or convertible to MultiPolygon
+- SRID: 4326 (WGS84)
+- Must not be empty or null
+- Topology must be valid (no self-intersections, closed rings)
+
+### Land Use Variation
+If `usoactual` differs from Level 4's current `currentLandUseName`:
+- Creates `LandPatrimonialVariation` record
+- Uses `variationDate` and `variationNotes` from job metadata
+- Calculates area and patrimonial deltas
+- Sets status to `PENDIENTE` (pending)
+
+## Area Calculation
+
+Geometry area is calculated in hectares:
+1. Transform geometry to appropriate UTM zone
+2. Calculate area in square meters using PostGIS `ST_Area`
+3. Convert to hectares (÷ 10,000)
+4. Store in `forest_geometry_n4.superficieHa`
+
+## Error Handling
+
+### Common Errors
+
+<AccordionGroup>
+  <Accordion title="ZIP incompleto" icon="file-zipper">
+    Missing required shapefile components (.shp, .shx, .dbf, or .prj)
+    
+    **Status Code**: 400
+    
+    **Solution**: Ensure all 4 files are included in the ZIP
+  </Accordion>
+  
+  <Accordion title="Nivel 4 no encontrado" icon="magnifying-glass">
+    Level 4 code in shapefile doesn't match any database record
+    
+    **Item Status**: FAILED
+    
+    **Solution**: Verify Level 4 codes exist and match hierarchy
+  </Accordion>
+  
+  <Accordion title="Geometría inválida" icon="shapes">
+    Geometry fails PostGIS validation (self-intersection, unclosed rings)
+    
+    **Item Status**: FAILED
+    
+    **Solution**: Repair geometry in GIS software before upload
+  </Accordion>
+  
+  <Accordion title="Projection missing" icon="globe">
+    .prj file missing or coordinate system not recognized
+    
+    **Status Code**: 400 or job FAILED
+    
+    **Solution**: Include valid .prj file with EPSG:4326 or convertible CRS
+  </Accordion>
+</AccordionGroup>
+
+## Background Worker
+
+The import is processed asynchronously by `/api/forest/geo/import/worker`:
+
+1. **Extraction**: Unzip and read shapefile using gdal/ogr
+2. **Validation**: Check each feature's attributes and geometry
+3. **Processing**: 
+   - Lookup Level 2/3/4 hierarchy
+   - Deactivate previous geometries (`is_active = false`, set `valid_to`)
+   - Insert new geometry record in `forest_geometry_n4`
+   - Create land use variation if applicable
+   - Update Level 4 `totalAreaHa` and centroid
+4. **Completion**: Update job status and counts
+
+<Note>
+  The worker endpoint is protected by `x-worker-secret` header (configured via `GEO_WORKER_SECRET` env var).
+</Note>
+
+## Permissions
+
+Requires one of:
+- `forest-patrimony:CREATE`
+- `forest-patrimony:UPDATE`
+- `forest-patrimony:READ` (for template download and status check)
+- `SUPER_ADMIN` role
+
+## Source Reference
+
+Implementation:
+- Upload: `src/app/api/forest/geo/import/route.ts:111-213`
+- Status: `src/app/api/forest/geo/import/[jobId]/route.ts:22-52`
+- Worker: `src/app/api/forest/geo/import/worker/route.ts`
+- Schema: `prisma/schema.prisma:862-901` (GeoImportJob, GeoImportJobItem)

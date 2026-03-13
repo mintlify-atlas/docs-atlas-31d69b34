@@ -1,0 +1,497 @@
+---
+title: 'Organization Management'
+description: 'CRUD operations for managing organizations'
+---
+
+## List Organizations
+
+`GET /api/organizations`
+
+Retrieve a list of all organizations the authenticated user has access to.
+
+### Authentication
+
+Requires valid session token. Users must have:
+- `ADMIN` or `SUPER_ADMIN` role, OR
+- `organizations:READ` permission
+
+### Scoping Rules
+
+- **SUPER_ADMIN**: Returns all non-deleted organizations
+- **ADMIN**: Returns only their own organization
+- **Custom roles**: Returns all non-deleted organizations (if permission granted)
+
+### Response
+
+<ResponseField name="items" type="array">
+  Array of organization objects
+  
+  <ResponseField name="id" type="string">
+    Organization UUID
+  </ResponseField>
+  
+  <ResponseField name="name" type="string">
+    Organization name
+  </ResponseField>
+  
+  <ResponseField name="rif" type="string">
+    Tax identification number from settings
+  </ResponseField>
+  
+  <ResponseField name="countryId" type="string">
+    Associated country UUID
+  </ResponseField>
+  
+  <ResponseField name="createdAt" type="DateTime">
+    Creation timestamp
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET \
+  https://your-domain.com/api/organizations \
+  -H 'Authorization: Bearer YOUR_SESSION_TOKEN'
+```
+
+### Example Response
+
+```json
+{
+  "items": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Acme Corporation",
+      "rif": "J-12345678-9",
+      "countryId": "660e8400-e29b-41d4-a716-446655440001",
+      "createdAt": "2024-03-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+### Implementation Reference
+
+See `src/app/api/organizations/route.ts:19-49` for the GET handler implementation.
+
+---
+
+## Create Organization
+
+`POST /api/organizations`
+
+Create a new organization in the system.
+
+### Authentication
+
+Requires valid session token. Users must have:
+- `SUPER_ADMIN` role (ADMIN users cannot create organizations), OR
+- `organizations:CREATE` permission
+
+### Request Body
+
+<ParamField name="name" type="string" required>
+  Organization name (2-255 characters). Used to generate unique slug.
+</ParamField>
+
+<ParamField name="rif" type="string" required>
+  Tax identification number (2-60 characters). Stored in settings JSON.
+</ParamField>
+
+<ParamField name="countryId" type="string">
+  UUID of the associated country. Optional or empty string.
+</ParamField>
+
+### Validation Rules
+
+- `name`: Minimum 2 characters, maximum 255 characters
+- `rif`: Minimum 2 characters, maximum 60 characters  
+- `countryId`: Must be valid UUID format or empty string
+- Organization slug (generated from name) must be unique
+
+### Response
+
+Returns the created organization with `201 Created` status.
+
+<ResponseField name="id" type="string">
+  UUID of created organization
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Organization name
+</ResponseField>
+
+<ResponseField name="rif" type="string">
+  Tax identification number
+</ResponseField>
+
+<ResponseField name="countryId" type="string">
+  Associated country UUID (or null)
+</ResponseField>
+
+<ResponseField name="createdAt" type="DateTime">
+  Creation timestamp
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST \
+  https://your-domain.com/api/organizations \
+  -H 'Authorization: Bearer YOUR_SESSION_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Acme Corporation",
+    "rif": "J-12345678-9",
+    "countryId": "660e8400-e29b-41d4-a716-446655440001"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Acme Corporation",
+  "rif": "J-12345678-9",
+  "countryId": "660e8400-e29b-41d4-a716-446655440001",
+  "createdAt": "2024-03-15T10:30:00Z"
+}
+```
+
+### Error Responses
+
+<Tabs>
+  <Tab title="Invalid Data">
+    ```json
+    {
+      "message": "Datos inválidos",
+      "code": 400,
+      "details": {
+        "fieldErrors": {
+          "name": ["String must contain at least 2 character(s)"]
+        }
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Duplicate Name">
+    ```json
+    {
+      "message": "Ya existe una organización con ese nombre",
+      "code": 409
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Insufficient Permissions">
+    ```json
+    {
+      "message": "Un usuario ADMIN solo puede ver y editar su propia organización",
+      "code": 403
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Implementation Reference
+
+See `src/app/api/organizations/route.ts:51-93` for the POST handler implementation.
+
+---
+
+## Update Organization
+
+`PATCH /api/organizations/[id]`
+
+Update an existing organization. Supports partial updates.
+
+### Authentication
+
+Requires valid session token. Users must have:
+- `ADMIN` or `SUPER_ADMIN` role, OR
+- `organizations:UPDATE` permission
+
+### Scoping Rules
+
+- **SUPER_ADMIN**: Can update any organization
+- **ADMIN**: Can only update their own organization (validated by `organizationId`)
+- **Custom roles**: Can update any organization (if permission granted)
+
+### Path Parameters
+
+<ParamField name="id" type="string" required>
+  UUID of the organization to update
+</ParamField>
+
+### Request Body
+
+All fields are optional. Only include fields you want to update.
+
+<ParamField name="name" type="string">
+  New organization name (2-255 characters)
+</ParamField>
+
+<ParamField name="rif" type="string">
+  New tax identification number (2-60 characters)
+</ParamField>
+
+<ParamField name="countryId" type="string">
+  New country UUID or empty string to remove association
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Organization UUID
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Updated organization name
+</ResponseField>
+
+<ResponseField name="rif" type="string">
+  Updated tax identification number
+</ResponseField>
+
+<ResponseField name="countryId" type="string">
+  Updated country UUID (or null)
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X PATCH \
+  https://your-domain.com/api/organizations/550e8400-e29b-41d4-a716-446655440000 \
+  -H 'Authorization: Bearer YOUR_SESSION_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Acme Corporation Ltd",
+    "rif": "J-98765432-1"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Acme Corporation Ltd",
+  "rif": "J-98765432-1",
+  "countryId": "660e8400-e29b-41d4-a716-446655440001"
+}
+```
+
+### Error Responses
+
+<Tabs>
+  <Tab title="Invalid Data">
+    ```json
+    {
+      "message": "Datos inválidos",
+      "code": 400,
+      "details": {
+        "fieldErrors": {
+          "name": ["String must contain at least 2 character(s)"]
+        }
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Wrong Organization">
+    ```json
+    {
+      "message": "Un usuario ADMIN solo puede editar su propia organización",
+      "code": 403
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Update Failed">
+    ```json
+    {
+      "message": "No se pudo actualizar la organización",
+      "code": 500
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Implementation Reference
+
+See `src/app/api/organizations/[id]/route.ts:18-62` for the PATCH handler implementation.
+
+---
+
+## Delete Organization
+
+`DELETE /api/organizations/[id]`
+
+Soft delete an organization by setting its `deletedAt` timestamp. The organization remains in the database but is excluded from queries.
+
+### Authentication
+
+Requires valid session token. Users must have:
+- `SUPER_ADMIN` role (ADMIN users cannot delete organizations), OR
+- `organizations:DELETE` permission
+
+### Path Parameters
+
+<ParamField name="id" type="string" required>
+  UUID of the organization to delete
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Success message: "Organización eliminada correctamente"
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X DELETE \
+  https://your-domain.com/api/organizations/550e8400-e29b-41d4-a716-446655440000 \
+  -H 'Authorization: Bearer YOUR_SESSION_TOKEN'
+```
+
+### Example Response
+
+```json
+{
+  "message": "Organización eliminada correctamente"
+}
+```
+
+### Error Responses
+
+<Tabs>
+  <Tab title="Insufficient Permissions">
+    ```json
+    {
+      "message": "Un usuario ADMIN solo puede ver y editar su propia organización",
+      "code": 403
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Delete Failed">
+    ```json
+    {
+      "message": "No se pudo eliminar la organización",
+      "code": 500
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Important Notes
+
+- This is a **soft delete** operation - the record remains in the database
+- Deleted organizations have `deletedAt` set to current timestamp
+- Deleted organizations are filtered out by `deletedAt: null` in queries
+- To restore a deleted organization, use the restore endpoint
+
+### Implementation Reference
+
+See `src/app/api/organizations/[id]/route.ts:64-94` for the DELETE handler implementation.
+
+---
+
+## Get Public Organizations
+
+`GET /api/organizations/public`
+
+Retrieve a list of all active organizations without authentication. Returns minimal data.
+
+### Authentication
+
+**No authentication required** - This is a public endpoint.
+
+### Response
+
+<ResponseField name="items" type="array">
+  Array of public organization objects
+  
+  <ResponseField name="id" type="string">
+    Organization UUID
+  </ResponseField>
+  
+  <ResponseField name="name" type="string">
+    Organization name
+  </ResponseField>
+  
+  <ResponseField name="rif" type="string">
+    Tax identification number
+  </ResponseField>
+</ResponseField>
+
+### Filtering
+
+Only returns organizations where:
+- `deletedAt` is `null`
+- `isActive` is `true`
+
+### Example Request
+
+```bash
+curl -X GET https://your-domain.com/api/organizations/public
+```
+
+### Example Response
+
+```json
+{
+  "items": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Acme Corporation",
+      "rif": "J-12345678-9"
+    },
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440001",
+      "name": "Global Industries",
+      "rif": "J-98765432-1"
+    }
+  ]
+}
+```
+
+### Implementation Reference
+
+See `src/app/api/organizations/public/route.ts:4-25` for the GET handler implementation.
+
+---
+
+## Permission Reference
+
+Quick reference for required permissions:
+
+| Operation | SUPER_ADMIN | ADMIN | Permission Required |
+|-----------|-------------|-------|---------------------|
+| List Organizations | ✓ | ✓ (own only) | `organizations:READ` |
+| Create Organization | ✓ | ✗ | `organizations:CREATE` |
+| Update Organization | ✓ | ✓ (own only) | `organizations:UPDATE` |
+| Delete Organization | ✓ | ✗ | `organizations:DELETE` |
+| Public List | No auth | No auth | None |
+
+## Data Schema Reference
+
+The organization validation schema is defined in `src/validations/organization.schema.ts:3-7`:
+
+```typescript
+const createOrganizationSchema = z.object({
+  name: z.string().min(2).max(255),
+  rif: z.string().min(2).max(60),
+  countryId: z.string().uuid("Seleccione un país válido").optional().or(z.literal("")),
+});
+```
+
+## Related Resources
+
+- [Organizations Overview](/api/organizations/overview) - API overview and authentication
+- [Authentication API](/api/auth/login) - User authentication
+- [Users API](/api/users/overview) - User management

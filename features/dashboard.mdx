@@ -1,0 +1,366 @@
+---
+title: "Dashboard"
+description: "Real-time metrics, analytics, and interactive geospatial visualization"
+---
+
+## Overview
+
+The SMyEG dashboard provides a comprehensive view of system metrics and an interactive geospatial map for visualizing forest patrimony data. The dashboard combines real-time statistics with powerful GIS capabilities.
+
+## Dashboard Pages
+
+SMyEG has two main dashboard views:
+
+<CardGroup cols={2}>
+  <Card title="Main Dashboard" icon="gauge" href="#main-dashboard">
+    System-wide metrics and statistics (`/dashboard`)
+  </Card>
+  
+  <Card title="GIS Dashboard" icon="map" href="#gis-dashboard">
+    Interactive geospatial map with forest data (`/`)
+  </Card>
+</CardGroup>
+
+## Main Dashboard
+
+The main dashboard (`/dashboard`) displays key system metrics:
+
+### Metrics API
+
+The metrics are served from `/api/dashboard/metrics`:
+
+```typescript src/app/api/dashboard/metrics/route.ts
+import { prisma } from "@/lib/prisma";
+import { ok, requireAuth } from "@/lib/api-helpers";
+
+export async function GET() {
+  const authResult = await requireAuth();
+  if ("error" in authResult) return authResult.error;
+
+  const [usersTotal, usersActive, pendingNotifications, auditTotal] = 
+    await Promise.all([
+      prisma.user.count({ where: { deletedAt: null } }),
+      prisma.user.count({ where: { status: "ACTIVE", deletedAt: null } }),
+      prisma.notification.count({ where: { status: "PENDING" } }),
+      prisma.auditLog.count()
+    ]);
+
+  return ok({
+    usersTotal,
+    usersActive,
+    pendingNotifications,
+    auditTotal,
+    generatedAt: new Date().toISOString()
+  });
+}
+```
+
+### Dashboard Page Component
+
+```typescript src/app/(dashboard)/page.tsx
+async function getMetrics() {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_APP_URL}/api/dashboard/metrics`,
+    { cache: "no-store" }
+  );
+
+  if (!response.ok) return null;
+  return response.json();
+}
+
+export default async function DashboardPage() {
+  const result = await getMetrics();
+  const metrics = result?.data;
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-semibold">Dashboard</h1>
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <article className="rounded-lg border p-3">
+          <p className="text-sm">Usuarios totales</p>
+          <p className="mt-1 text-2xl font-semibold">
+            {metrics?.usersTotal ?? "-"}
+          </p>
+        </article>
+        
+        <article className="rounded-lg border p-3">
+          <p className="text-sm">Usuarios activos</p>
+          <p className="mt-1 text-2xl font-semibold">
+            {metrics?.usersActive ?? "-"}
+          </p>
+        </article>
+        
+        <article className="rounded-lg border p-3">
+          <p className="text-sm">Notificaciones pendientes</p>
+          <p className="mt-1 text-2xl font-semibold">
+            {metrics?.pendingNotifications ?? "-"}
+          </p>
+        </article>
+        
+        <article className="rounded-lg border p-3">
+          <p className="text-sm">Eventos de auditoría</p>
+          <p className="mt-1 text-2xl font-semibold">
+            {metrics?.auditTotal ?? "-"}
+          </p>
+        </article>
+      </div>
+    </div>
+  );
+}
+```
+
+### Metrics Included
+
+<ResponseField name="usersTotal" type="number">
+  Total number of users (excluding soft-deleted users)
+</ResponseField>
+
+<ResponseField name="usersActive" type="number">
+  Number of active users with status `ACTIVE`
+</ResponseField>
+
+<ResponseField name="pendingNotifications" type="number">
+  Count of notifications with status `PENDING`
+</ResponseField>
+
+<ResponseField name="auditTotal" type="number">
+  Total count of audit log entries
+</ResponseField>
+
+<ResponseField name="generatedAt" type="string">
+  ISO 8601 timestamp of when metrics were generated
+</ResponseField>
+
+## GIS Dashboard
+
+The GIS dashboard (`/`) provides an interactive map interface for visualizing and managing forest patrimony data:
+
+```typescript src/app/(dashboard)/dashboard/page.tsx
+import { GeoDashboardMapClient } from "@/components/GeoDashboardMapClient";
+
+export default function DashboardPage() {
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-semibold">Inicio</h1>
+      <GeoDashboardMapClient />
+    </div>
+  );
+}
+```
+
+### Client-Side Rendering
+
+The map component uses dynamic import with SSR disabled to ensure Leaflet loads correctly:
+
+```typescript src/components/GeoDashboardMapClient.tsx
+"use client";
+
+import dynamic from "next/dynamic";
+
+const GeoDashboardMap = dynamic(
+  () => import("@/components/GeoDashboardMap").then(
+    (module) => module.GeoDashboardMap
+  ),
+  { ssr: false }
+);
+
+export function GeoDashboardMapClient() {
+  return <GeoDashboardMap />;
+}
+```
+
+<Info>
+  Server-side rendering is disabled for the map component because Leaflet requires browser APIs.
+</Info>
+
+## Dashboard Features
+
+### Real-Time Data
+
+Dashboard metrics are fetched with `cache: "no-store"` to ensure fresh data:
+
+```typescript
+const response = await fetch(
+  `${process.env.NEXT_PUBLIC_APP_URL}/api/dashboard/metrics`,
+  { cache: "no-store" } // Always fetch fresh data
+);
+```
+
+### Responsive Grid Layout
+
+The metric cards use a responsive grid:
+
+```tsx
+<div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+  {/* Metric cards */}
+</div>
+```
+
+- Mobile: 1 column
+- Tablet: 2 columns (`md:grid-cols-2`)
+- Desktop: 4 columns (`lg:grid-cols-4`)
+
+### Error Handling
+
+The dashboard gracefully handles API failures:
+
+```typescript
+async function getMetrics() {
+  const response = await fetch(/* ... */);
+  
+  if (!response.ok) {
+    return null; // Return null on error
+  }
+  
+  return response.json();
+}
+
+// In component:
+const metrics = result?.data;
+{metrics?.usersTotal ?? "-"} // Show "-" if data unavailable
+```
+
+## Extending the Dashboard
+
+### Adding New Metrics
+
+<Steps>
+  <Step title="Update API Route">
+    Add the new metric calculation to `/api/dashboard/metrics/route.ts`:
+    
+    ```typescript
+    const [existing, newMetric] = await Promise.all([
+      // existing queries...
+      prisma.newModel.count({ /* ... */ })
+    ]);
+    
+    return ok({
+      // existing metrics...
+      newMetric
+    });
+    ```
+  </Step>
+  
+  <Step title="Update Page Component">
+    Add a new metric card to the dashboard page:
+    
+    ```tsx
+    <article className="rounded-lg border p-3">
+      <p className="text-sm">New Metric</p>
+      <p className="mt-1 text-2xl font-semibold">
+        {metrics?.newMetric ?? "-"}
+      </p>
+    </article>
+    ```
+  </Step>
+  
+  <Step title="Test">
+    Verify the metric displays correctly and handles errors gracefully.
+  </Step>
+</Steps>
+
+### Custom Dashboard Widgets
+
+Create reusable metric card components:
+
+```typescript
+type MetricCardProps = {
+  label: string;
+  value: number | string | null;
+  icon?: React.ReactNode;
+};
+
+export function MetricCard({ label, value, icon }: MetricCardProps) {
+  return (
+    <article className="rounded-lg border p-3">
+      <div className="flex items-center gap-2">
+        {icon}
+        <p className="text-sm">{label}</p>
+      </div>
+      <p className="mt-1 text-2xl font-semibold">
+        {value ?? "-"}
+      </p>
+    </article>
+  );
+}
+```
+
+## Permission Requirements
+
+The metrics API requires authentication:
+
+```typescript src/app/api/dashboard/metrics/route.ts
+const authResult = await requireAuth();
+if ("error" in authResult) return authResult.error;
+```
+
+Users need the `dashboard:READ` permission to access the dashboard:
+
+```typescript
+const ability = buildAbilityFromPermissions(permissions);
+
+if (!ability.can("read", "dashboard")) {
+  redirect("/unauthorized");
+}
+```
+
+## Performance Considerations
+
+### Parallel Queries
+
+The metrics API uses `Promise.all` to fetch all metrics in parallel:
+
+```typescript
+const [usersTotal, usersActive, pendingNotifications, auditTotal] = 
+  await Promise.all([
+    prisma.user.count({ where: { deletedAt: null } }),
+    prisma.user.count({ where: { status: "ACTIVE", deletedAt: null } }),
+    prisma.notification.count({ where: { status: "PENDING" } }),
+    prisma.auditLog.count()
+  ]);
+```
+
+<Tip>
+  Using `Promise.all` ensures all queries execute concurrently, reducing total response time.
+</Tip>
+
+### Caching Strategy
+
+For production, consider adding cache headers:
+
+```typescript
+export async function GET() {
+  // ... fetch metrics
+  
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120"
+    }
+  });
+}
+```
+
+## Chart Integration
+
+The dashboard can be extended with charts using libraries like Recharts:
+
+```typescript
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+
+export function UserGrowthChart({ data }: { data: any[] }) {
+  return (
+    <LineChart width={600} height={300} data={data}>
+      <CartesianGrid strokeDasharray="3 3" />
+      <XAxis dataKey="date" />
+      <YAxis />
+      <Tooltip />
+      <Line type="monotone" dataKey="users" stroke="#8884d8" />
+    </LineChart>
+  );
+}
+```
+
+<Note>
+  See the [Geospatial Data](/features/geospatial-data) documentation for details on the interactive map features.
+</Note>

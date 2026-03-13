@@ -1,80 +1,224 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart Guide'
+description: 'Get started with SMyEG in minutes - from first login to managing your forest patrimony'
 ---
 
-## Get started in three steps
+## First Login
 
-Get your documentation site running locally and make your first customization.
+After completing the [installation](/installation), you can log in with the default administrator credentials created during database seeding.
 
-### Step 1: Set up your local environment
+<Steps>
+  <Step title="Navigate to the application">
+    Open your browser and navigate to `http://localhost:3000`
+  </Step>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+  <Step title="Select your organization">
+    Choose "Default Organization" from the organization selection screen
+  </Step>
 
-### Step 2: Deploy your changes
+  <Step title="Enter credentials">
+    Use the default admin credentials:
+    - **Email**: `admin@example.com`
+    - **Password**: `Admin1234`
+  </Step>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+  <Step title="Access the dashboard">
+    After successful authentication, you'll be redirected to the main dashboard
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Warning>
+  Change the default admin password immediately after first login. Navigate to your profile settings to update credentials.
+</Warning>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## Explore the Dashboard
 
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
+The main dashboard provides an overview of your system:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="System Metrics" icon="chart-line">
+    View user count, notifications, and recent audit activity
+  </Card>
+  <Card title="GIS Dashboard" icon="map">
+    Interactive geospatial map with your forest patrimony data
+  </Card>
+  <Card title="Quick Actions" icon="bolt">
+    Access frequently used features and modules
+  </Card>
+  <Card title="Recent Activity" icon="clock">
+    Monitor recent changes and system events
+  </Card>
 </CardGroup>
 
+## Common First Tasks
+
+### Create Your First Organization
+
+<Steps>
+  <Step title="Navigate to Organizations">
+    Click **Organizations** in the sidebar navigation
+  </Step>
+
+  <Step title="Create new organization">
+    Click the **Create Organization** button
+  </Step>
+
+  <Step title="Fill in details">
+    Provide the organization details:
+    - Organization name
+    - Tax ID (RIF)
+    - Country
+    - Contact information
+  </Step>
+
+  <Step title="Save and configure">
+    Save the organization and configure additional settings like logo and branding
+  </Step>
+</Steps>
+
+### Add Users to Your Organization
+
+<Steps>
+  <Step title="Go to User Management">
+    Navigate to **Users** from the sidebar
+  </Step>
+
+  <Step title="Create a new user">
+    Click **Create User** and provide:
+    - Email address
+    - Username
+    - Full name
+    - Initial password
+  </Step>
+
+  <Step title="Assign a role">
+    Select an appropriate role:
+    - **ADMIN**: Full administrative access
+    - **GERENTE_CAMPO**: Field manager access
+    - **CONTADOR**: Accounting and reporting access
+    - **USER**: Basic access
+  </Step>
+
+  <Step title="Set organization">
+    Assign the user to your organization
+  </Step>
+</Steps>
+
+### Import Geospatial Data
+
+<Steps>
+  <Step title="Prepare your shapefile">
+    Create a ZIP file containing:
+    - `.shp` (geometry)
+    - `.shx` (shape index)
+    - `.dbf` (attributes)
+    - `.prj` (projection)
+
+    Required attributes:
+    - `nivel2_id`: Level 2 ID (finca/property)
+    - `nivel3_id`: Level 3 ID (lote/compartment)
+    - `nivel4_id`: Level 4 ID (rodal/plot)
+  </Step>
+
+  <Step title="Navigate to Forest Patrimony">
+    Go to **Forest Patrimony** in the main navigation
+  </Step>
+
+  <Step title="Upload shapefile">
+    Click **Import Shapefile** and select your ZIP file
+  </Step>
+
+  <Step title="Monitor import progress">
+    The import runs as a background job. Check the status in the import jobs list.
+  </Step>
+</Steps>
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  For detailed information about shapefile requirements and validation rules, see the [Shapefile Import Guide](/geo/shapefile-import).
 </Note>
+
+### View Audit Logs
+
+Monitor all system activity through the comprehensive audit system:
+
+<Steps>
+  <Step title="Access audit logs">
+    Navigate to **Audit** from the sidebar
+  </Step>
+
+  <Step title="Filter logs">
+    Use filters to find specific events:
+    - Date range
+    - User
+    - Action type (CREATE, UPDATE, DELETE, LOGIN, etc.)
+    - Module
+  </Step>
+
+  <Step title="View details">
+    Click on any audit entry to see:
+    - Old and new values
+    - Request metadata (IP, user agent)
+    - Execution time
+    - HTTP status
+  </Step>
+
+  <Step title="Export data">
+    Export audit logs to CSV or JSON for compliance reporting
+  </Step>
+</Steps>
+
+## Start Background Workers
+
+For production use, start the background workers to process geospatial jobs and asset measurements:
+
+<CodeGroup>
+
+```bash Development
+# Start the geo worker
+npm run worker:geo
+
+# In a separate terminal, start the asset measurement worker
+npm run worker:assets
+```
+
+```bash Production (PM2)
+# Start all services including workers
+pm2 start ecosystem.config.cjs
+
+# View status
+pm2 status
+
+# View logs
+pm2 logs confor-geo-worker
+```
+
+</CodeGroup>
+
+The workers handle:
+- Shapefile imports and validation
+- Surface area recalculations
+- Land use variation detection
+- Asset measurement calculations
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Features" icon="gear" href="/features/authentication">
+    Set up authentication, roles, and permissions
+  </Card>
+  <Card title="Manage Forest Data" icon="tree" href="/modules/forest-patrimony">
+    Learn about the forest patrimony hierarchy
+  </Card>
+  <Card title="Track Biological Assets" icon="leaf" href="/modules/biological-assets">
+    Set up biological asset tracking and measurements
+  </Card>
+  <Card title="Deploy to Production" icon="server" href="/deployment/docker">
+    Deploy SMyEG with Docker or PM2
+  </Card>
+</CardGroup>
+
+## Need Help?
+
+- Check the [Installation Guide](/installation) for setup troubleshooting
+- Review [Environment Variables](/deployment/environment-variables) for configuration options
+- Explore the [API Reference](/api/auth/login) for integration guidance

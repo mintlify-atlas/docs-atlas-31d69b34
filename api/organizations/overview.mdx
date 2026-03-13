@@ -1,0 +1,162 @@
+---
+title: 'Organizations API Overview'
+description: 'Manage organizations in the SMyEG system with role-based access control'
+---
+
+## Introduction
+
+The Organizations API provides endpoints to manage organizations within the SMyEG system. Organizations are the top-level entities that contain users, roles, and other resources. Each organization can be associated with a country and includes configuration settings like RIF (tax identification number).
+
+## Base URL
+
+All Organizations API endpoints are accessed via:
+
+```
+/api/organizations
+```
+
+## Authentication
+
+All endpoints require authentication via session token. Include your authentication token in the request headers:
+
+```http
+Authorization: Bearer YOUR_SESSION_TOKEN
+```
+
+Unauthenticated requests will return a `401 Unauthorized` error.
+
+## Role-Based Access Control (RBAC)
+
+The Organizations API implements role-based permissions:
+
+### Roles
+
+<ResponseField name="SUPER_ADMIN" type="role">
+  Full access to all organizations. Can create, read, update, and delete any organization.
+</ResponseField>
+
+<ResponseField name="ADMIN" type="role">
+  Scoped access to their own organization only. Can read and update their own organization but cannot create or delete organizations.
+</ResponseField>
+
+<ResponseField name="Custom Roles" type="role">
+  Users with custom roles require specific permissions on the `organizations` module:
+  - `organizations:READ` - View organizations
+  - `organizations:CREATE` - Create new organizations
+  - `organizations:UPDATE` - Update existing organizations
+  - `organizations:DELETE` - Delete organizations
+  - `organizations:EXPORT` - Export organization data
+</ResponseField>
+
+### Permission Scoping
+
+- **SUPER_ADMIN**: Can access all organizations without restrictions
+- **ADMIN**: Limited to their own organization (identified by `organizationId` in their session)
+- **Custom Roles**: Must have explicit permissions granted for each action
+
+## Data Model
+
+The Organization model (from `prisma/schema.prisma:260-293`) includes:
+
+<ResponseField name="id" type="string" required>
+  Unique identifier (UUID)
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Organization name (2-255 characters)
+</ResponseField>
+
+<ResponseField name="slug" type="string" required>
+  URL-friendly unique identifier generated from name
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Optional organization description
+</ResponseField>
+
+<ResponseField name="logoUrl" type="string">
+  URL to organization logo image
+</ResponseField>
+
+<ResponseField name="countryId" type="string">
+  UUID reference to associated country
+</ResponseField>
+
+<ResponseField name="website" type="string">
+  Organization website URL
+</ResponseField>
+
+<ResponseField name="isActive" type="boolean" default="true">
+  Whether the organization is active
+</ResponseField>
+
+<ResponseField name="settings" type="JSON">
+  Organization-specific settings including:
+  - `rif`: Tax identification number (2-60 characters)
+</ResponseField>
+
+<ResponseField name="createdAt" type="DateTime">
+  Timestamp when organization was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="DateTime">
+  Timestamp of last update
+</ResponseField>
+
+<ResponseField name="deletedAt" type="DateTime">
+  Soft delete timestamp (null if not deleted)
+</ResponseField>
+
+## Error Handling
+
+The API uses standard HTTP status codes:
+
+- `200 OK` - Successful request
+- `201 Created` - Resource successfully created
+- `400 Bad Request` - Invalid request data
+- `401 Unauthorized` - Missing or invalid authentication
+- `403 Forbidden` - Insufficient permissions
+- `404 Not Found` - Resource not found
+- `409 Conflict` - Resource already exists
+- `500 Internal Server Error` - Server error
+
+### Error Response Format
+
+```json
+{
+  "message": "Error message in Spanish",
+  "code": 400,
+  "details": {
+    "fieldErrors": {
+      "name": ["String must contain at least 2 character(s)"]
+    }
+  }
+}
+```
+
+## Rate Limiting
+
+Export operations have configurable limits:
+
+- Default max export limit: 5,000 records
+- Configurable via `ORGANIZATIONS_EXPORT_MAX_LIMIT` environment variable
+
+## Soft Deletes
+
+Organizations use soft delete functionality. Deleted organizations have a `deletedAt` timestamp and are excluded from most queries but remain in the database.
+
+## Related Endpoints
+
+The Organizations API includes several endpoint groups:
+
+- **Management** - CRUD operations (`/api/organizations`, `/api/organizations/[id]`)
+- **Import/Export** - Bulk operations (`/api/organizations/import`, `/api/organizations/export`)
+- **Public Access** - Unauthenticated endpoints (`/api/organizations/public`)
+- **Branding** - Logo and appearance (`/api/organizations/logo`, `/api/organizations/[id]/branding`)
+- **Restoration** - Soft delete recovery (`/api/organizations/[id]/restore`)
+
+## Next Steps
+
+- [Organization Management](/api/organizations/management) - Learn about CRUD operations
+- [Authentication Guide](/api/auth/login) - Set up authentication
+- [Roles & Permissions](/features/roles-permissions) - Understand the permission system

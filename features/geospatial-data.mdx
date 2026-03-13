@@ -1,0 +1,507 @@
+---
+title: "Geospatial Data"
+description: "Interactive Leaflet-based GIS system for forest patrimony management"
+---
+
+## Overview
+
+SMyEG includes a powerful **geospatial visualization system** built with Leaflet, enabling interactive mapping of forest patrimony data with support for multiple base maps, layer management, and drawing tools.
+
+## Leaflet Integration
+
+The GIS system uses React Leaflet for map rendering with custom controllers:
+
+```typescript src/components/GeoDashboardMap.tsx
+import { MapContainer, TileLayer, GeoJSON, Polygon, Polyline, 
+         ScaleControl, CircleMarker } from "react-leaflet";
+
+export function GeoDashboardMap() {
+  return (
+    <MapContainer
+      center={[mapView.lat, mapView.lng]}
+      zoom={mapView.zoom}
+      style={{ width: "100%", height: "100%" }}
+    >
+      <TileLayer
+        url={activeBasemap.url}
+        attribution={activeBasemap.attribution}
+        maxZoom={activeBasemap.maxZoom}
+      />
+      
+      <ScaleControl position="bottomleft" />
+      
+      {/* Custom controllers */}
+      <MapResizeController resizeToken={resizeToken} />
+      <MapInteractionController /* ... */ />
+      <MapViewPersistenceController /* ... */ />
+    </MapContainer>
+  );
+}
+```
+
+## Base Map Options
+
+The system supports multiple base map providers:
+
+<Tabs>
+  <Tab title="OpenStreetMap">
+    ```typescript
+    osm: {
+      label: "Openstreetmap",
+      url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      attribution: '© OpenStreetMap contributors',
+      subdomains: ["a", "b", "c"],
+      maxZoom: 19
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Google Satellite">
+    ```typescript
+    googleSatellite: {
+      label: "Google Satellite",
+      url: "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+      attribution: "© Google",
+      maxZoom: 20
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Topographic">
+    ```typescript
+    topographic: {
+      label: "Topografico",
+      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+      attribution: "Tiles © Esri",
+      maxZoom: 19
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Gray Canvas">
+    ```typescript
+    grayCanvas: {
+      label: "Lienzo gris",
+      url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+      attribution: '© OpenStreetMap contributors © CARTO',
+      subdomains: ["a", "b", "c", "d"],
+      maxZoom: 20
+    }
+    ```
+  </Tab>
+  
+  <Tab title="National Geographic">
+    ```typescript
+    nationalGeographic: {
+      label: "National Geographic",
+      url: "https://services.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}",
+      attribution: "Tiles © Esri — National Geographic",
+      maxZoom: 16
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Layer Management
+
+The system manages multiple geospatial layers with individual visibility and styling controls:
+
+### Layer Structure
+
+```typescript src/components/GeoDashboardMapClient.tsx
+type MapLayer = {
+  id: string;
+  name: string;
+  visible: boolean;
+  opacity: number;
+  color: string;
+  styleMode: "single" | "surfaceRange";
+  data: FeatureCollection;
+};
+```
+
+### Loading Layers
+
+Layers are fetched from the API with bounding box filtering:
+
+```typescript src/components/GeoDashboardMapClient.tsx
+const loadLayer = useCallback(async () => {
+  setLoadingLayer(true);
+  try {
+    const response = await fetch(
+      `/api/forest/geo/layers/nivel4?bbox=${WORLD_BBOX}`,
+      { cache: "no-store" }
+    );
+    const payload = await response.json();
+
+    if (payload.success && payload.data) {
+      const layerData = payload.data;
+      setLayers((previous) => {
+        const existing = previous.find((layer) => 
+          layer.id === "rodales-activos"
+        );
+        const baseLayer = createLayer(
+          "Rodales activos (Nivel 4)", 
+          layerData, 
+          existing
+        );
+        baseLayer.id = "rodales-activos";
+        const others = previous.filter((layer) => 
+          layer.id !== "rodales-activos"
+        );
+        return applyPersistedSettings([baseLayer, ...others], settings);
+      });
+    }
+  } catch (error) {
+    // Error handling
+  } finally {
+    setLoadingLayer(false);
+  }
+}, []);
+```
+
+### Layer Styling
+
+Layers can use single color or surface-based color ranges:
+
+```typescript src/components/GeoDashboardMapClient.tsx
+function colorForSurface(surfaceHa: number) {
+  if (surfaceHa < 10) return "#34d399";  // Green
+  if (surfaceHa < 50) return "#facc15";  // Yellow
+  if (surfaceHa < 150) return "#f97316"; // Orange
+  return "#ef4444";                      // Red
+}
+```
+
+## Interactive Features
+
+### Polygon Selection
+
+Users can select features on the map for detailed analysis:
+
+```typescript
+const [selectedFeatureIds, setSelectedFeatureIds] = useState<string[]>([]);
+
+// Toggle feature selection
+function toggleFeatureSelection(featureId: string) {
+  setSelectedFeatureIds((prev) => 
+    prev.includes(featureId)
+      ? prev.filter((id) => id !== featureId)
+      : [...prev, featureId]
+  );
+}
+```
+
+### Drawing Tools
+
+The system supports multiple drawing modes:
+
+<CardGroup cols={2}>
+  <Card title="Distance Measurement" icon="ruler">
+    Draw polylines to measure distances in meters/kilometers.
+  </Card>
+  
+  <Card title="Area Measurement" icon="draw-polygon">
+    Draw polygons to calculate areas in m²/hectares.
+  </Card>
+  
+  <Card title="Split Polygons" icon="scissors">
+    Split existing forest patches into multiple sections.
+  </Card>
+  
+  <Card title="Create Features" icon="plus">
+    Draw new forest patrimony features directly on the map.
+  </Card>
+</CardGroup>
+
+### Distance Calculation
+
+Uses the Haversine formula for accurate distance calculations:
+
+```typescript src/components/GeoDashboardMapClient.tsx
+function haversineDistanceMeters(a: PointerCoords, b: PointerCoords) {
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusMeters = 6371000;
+
+  const lat1 = toRadians(a.lat);
+  const lat2 = toRadians(b.lat);
+  const deltaLat = toRadians(b.lat - a.lat);
+  const deltaLng = toRadians(b.lng - a.lng);
+
+  const h = Math.sin(deltaLat / 2) ** 2
+    + Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
+
+  return 2 * earthRadiusMeters * Math.asin(Math.sqrt(h));
+}
+
+function formatDistance(distanceMeters: number) {
+  if (distanceMeters < 1000) return `${distanceMeters.toFixed(1)} m`;
+  return `${(distanceMeters / 1000).toFixed(3)} km`;
+}
+```
+
+### Area Calculation
+
+Uses Turf.js for polygon area calculations:
+
+```typescript src/components/GeoDashboardMapClient.tsx
+import { area as turfArea, polygon as turfPolygon } from "@turf/turf";
+
+const drawAreaM2 = useMemo(() => {
+  if (drawPoints.length < 3) return 0;
+
+  const ring = drawPoints.map((point) => [point.lng, point.lat]);
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  
+  if (first && last && (first[0] !== last[0] || first[1] !== last[1])) {
+    ring.push([first[0], first[1]]); // Close the ring
+  }
+
+  try {
+    const polygon = turfPolygon([ring]);
+    return turfArea(polygon);
+  } catch {
+    return 0;
+  }
+}, [drawPoints]);
+
+function formatArea(areaM2: number) {
+  if (areaM2 >= 10000) return `${(areaM2 / 10000).toFixed(3)} ha`;
+  return `${areaM2.toFixed(1)} m²`;
+}
+```
+
+## Map Controllers
+
+### Resize Controller
+
+Ensures the map resizes correctly when the layout changes:
+
+```typescript src/components/GeoDashboardMapClient.tsx
+function MapResizeController({ resizeToken }: { resizeToken: string }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const run = () => map.invalidateSize({ animate: false });
+    
+    run();
+    const raf = window.requestAnimationFrame(run);
+    const timeout = window.setTimeout(run, 180);
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(timeout);
+    };
+  }, [map, resizeToken]);
+
+  return null;
+}
+```
+
+### Interaction Controller
+
+Handles mouse events for drawing and coordinate capture:
+
+```typescript src/components/GeoDashboardMapClient.tsx
+function MapInteractionController({
+  editMode,
+  isCoordinateCaptureEnabled,
+  onPointerMove,
+  onMapClick,
+  onMapMouseUp
+}: Props) {
+  useMapEvents({
+    mousemove: (event) => {
+      onPointerMove({ lat: event.latlng.lat, lng: event.latlng.lng });
+    },
+    mouseup: () => {
+      onMapMouseUp();
+    },
+    click: (event) => {
+      if (editMode === "none" && !isCoordinateCaptureEnabled) return;
+      onMapClick({ lat: event.latlng.lat, lng: event.latlng.lng });
+    }
+  });
+
+  return null;
+}
+```
+
+### View Persistence
+
+Automatically saves and restores the map view:
+
+```typescript src/components/GeoDashboardMapClient.tsx
+function MapViewPersistenceController({ onViewChange }: Props) {
+  const map = useMap();
+
+  useMapEvents({
+    moveend: () => {
+      const center = map.getCenter();
+      onViewChange({ 
+        lat: center.lat, 
+        lng: center.lng, 
+        zoom: map.getZoom() 
+      });
+    },
+    zoomend: () => {
+      const center = map.getCenter();
+      onViewChange({ 
+        lat: center.lat, 
+        lng: center.lng, 
+        zoom: map.getZoom() 
+      });
+    }
+  });
+
+  return null;
+}
+```
+
+## Data Import/Export
+
+### Bulk Import
+
+Supports importing geospatial data from CSV or Excel:
+
+```typescript src/components/GeoDashboardMapClient.tsx
+const handleUpload = useCallback(async (file: File) => {
+  setUploading(true);
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (variationDate) {
+      formData.append("variationDate", variationDate);
+    }
+    if (variationNotes.trim()) {
+      formData.append("variationNotes", variationNotes.trim());
+    }
+
+    const response = await fetch("/api/forest/geo/import", {
+      method: "POST",
+      body: formData
+    });
+
+    const payload = await response.json();
+    if (payload.success && payload.data?.jobId) {
+      pollJob(payload.data.jobId);
+    }
+  } catch (error) {
+    // Error handling
+  } finally {
+    setUploading(false);
+  }
+}, [variationDate, variationNotes]);
+```
+
+### Template Download
+
+Provides CSV/Excel templates for bulk import:
+
+```typescript src/components/GeoDashboardMapClient.tsx
+const downloadShapefileTemplate = useCallback(async (format: "csv" | "xlsx") => {
+  try {
+    const response = await fetch(
+      `/api/forest/geo/import?format=${format}`, 
+      { method: "GET" }
+    );
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = format === "xlsx"
+      ? "plantilla_importacion_nivel4_variacion.xlsx"
+      : "plantilla_importacion_nivel4_variacion.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    // Error handling
+  }
+}, []);
+```
+
+## Search and Filtering
+
+### Hierarchical Filtering
+
+Filter features by forest patrimony hierarchy:
+
+```typescript src/components/GeoDashboardMapClient.tsx
+const filteredVisibleLayers = useMemo(() => {
+  return visibleLayers.map((layer) => ({
+    ...layer,
+    data: {
+      ...layer.data,
+      features: layer.data.features.filter((feature) => {
+        const level2Id = String(feature.properties.level2Id ?? "").trim();
+        const level3Id = String(feature.properties.level3Id ?? "").trim();
+        const level4Id = String(feature.properties.level4Id ?? "").trim();
+
+        return (
+          (!selectedLevel2 || level2Id === selectedLevel2) &&
+          (!selectedLevel3 || level3Id === selectedLevel3) &&
+          (!selectedLevel4 || level4Id === selectedLevel4)
+        );
+      })
+    }
+  }));
+}, [visibleLayers, selectedLevel2, selectedLevel3, selectedLevel4]);
+```
+
+### Text Search
+
+Search by code or name:
+
+```typescript src/components/GeoDashboardMapClient.tsx
+const searchMatches = useMemo(() => {
+  if (!normalizedSearch) return [];
+
+  const matches = [];
+  for (const layer of layers) {
+    for (const feature of layer.data.features) {
+      const level4Code = String(feature.properties.level4Code ?? "");
+      const level4Name = String(feature.properties.level4Name ?? "");
+      
+      if (
+        level4Code.toLowerCase().includes(normalizedSearch) ||
+        level4Name.toLowerCase().includes(normalizedSearch)
+      ) {
+        matches.push({
+          level4Id: feature.properties.level4Id,
+          label: `${level4Code} · ${level4Name}`,
+          geometry: feature.geometry
+        });
+      }
+    }
+  }
+  return matches;
+}, [layers, normalizedSearch]);
+```
+
+## Performance Optimization
+
+<AccordionGroup>
+  <Accordion title="Client-Side Rendering">
+    The map component is dynamically imported with `ssr: false` to prevent server-side rendering issues with Leaflet.
+  </Accordion>
+  
+  <Accordion title="Layer Caching">
+    Layer settings (visibility, opacity, color) are persisted to localStorage to maintain state across sessions.
+  </Accordion>
+  
+  <Accordion title="Memoized Computations">
+    Heavy computations like filtering, area calculations, and search results are memoized with `useMemo`.
+  </Accordion>
+  
+  <Accordion title="Lazy Feature Loading">
+    Features are loaded with bounding box filtering to limit the amount of data transferred.
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  The geospatial system uses EPSG:4326 (WGS 84) coordinate reference system for all spatial data.
+</Note>

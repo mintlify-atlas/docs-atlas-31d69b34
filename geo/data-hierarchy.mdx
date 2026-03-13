@@ -1,0 +1,527 @@
+---
+title: 'Geospatial Data Hierarchy'
+description: 'Forest patrimony hierarchy and geospatial data organization'
+---
+
+## Overview
+
+SMyEG organizes forest patrimony data in a **three-level hierarchy** that mirrors real-world forest management structures:
+
+- **Level 2**: Finca (Farm/Estate)
+- **Level 3**: Lote (Plot/Block)
+- **Level 4**: Rodal/Parcela (Stand/Parcel) - where geometry is stored
+
+## Hierarchy Structure
+
+```
+Organization
+  └─ Level 2 (Finca)
+      └─ Level 3 (Lote)
+          └─ Level 4 (Rodal)
+              └─ Geometry (forest_geometry_n4)
+```
+
+### Organization
+
+<ParamField path="id" type="uuid" required>
+  Unique organization identifier
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Organization name
+</ParamField>
+
+<ParamField path="code" type="string">
+  Optional organization code
+</ParamField>
+
+All geospatial data is scoped to a single organization. Users can only access geometries belonging to their organization.
+
+### Level 2: Finca
+
+The highest level of the forest patrimony hierarchy, typically representing a farm or estate.
+
+<ParamField path="id" type="uuid" required>
+  Unique Level 2 identifier
+</ParamField>
+
+<ParamField path="code" type="string" required>
+  Level 2 code (e.g., "N2-001", "FINCA-01")
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Level 2 name (e.g., "Finca Principal")
+</ParamField>
+
+<ParamField path="organizationId" type="uuid" required>
+  Parent organization
+</ParamField>
+
+<ParamField path="isActive" type="boolean" required>
+  Whether this Level 2 is active
+</ParamField>
+
+**Database Table:** `ForestPatrimonyLevel2`
+
+### Level 3: Lote
+
+Subdivisions within a Finca, typically representing plots or blocks.
+
+<ParamField path="id" type="uuid" required>
+  Unique Level 3 identifier
+</ParamField>
+
+<ParamField path="code" type="string" required>
+  Level 3 code (e.g., "N3-001", "LOTE-01")
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Level 3 name (e.g., "Lote Norte")
+</ParamField>
+
+<ParamField path="level2Id" type="uuid" required>
+  Parent Level 2 (Finca)
+</ParamField>
+
+<ParamField path="isActive" type="boolean" required>
+  Whether this Level 3 is active
+</ParamField>
+
+**Database Table:** `ForestPatrimonyLevel3`
+
+### Level 4: Rodal/Parcela
+
+The finest level of the hierarchy where **geometry is stored**. Represents individual stands, parcels, or management units.
+
+<ParamField path="id" type="uuid" required>
+  Unique Level 4 identifier
+</ParamField>
+
+<ParamField path="code" type="string" required>
+  Level 4 code (e.g., "N4-001", "RODAL-001")
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Level 4 name (e.g., "Rodal A")
+</ParamField>
+
+<ParamField path="level3Id" type="uuid" required>
+  Parent Level 3 (Lote)
+</ParamField>
+
+<ParamField path="type" type="enum" required>
+  Type of Level 4 unit:
+  - `RODAL`: Stand
+  - `PARCELA`: Parcel
+  - `ENUMERATION`: Enumeration unit
+  - `UNIDAD_DE_MANEJO`: Management unit
+  - `CONUCO`: Small farm plot
+  - `OTRO_USO`: Other use
+</ParamField>
+
+<ParamField path="fscCertificateStatus" type="enum" required>
+  FSC certification status: `SI` or `NO`
+</ParamField>
+
+<ParamField path="currentLandUseName" type="string">
+  Current land use (must match `LandUseType.name`)
+</ParamField>
+
+<ParamField path="previousLandUseName" type="string">
+  Previous land use
+</ParamField>
+
+<ParamField path="landUseChangeDate" type="date">
+  Date of last land use change
+</ParamField>
+
+<ParamField path="totalAreaHa" type="decimal">
+  Total area in hectares (calculated from geometry)
+</ParamField>
+
+<ParamField path="centroidLatitude" type="decimal">
+  Centroid latitude (calculated from geometry)
+</ParamField>
+
+<ParamField path="centroidLongitude" type="decimal">
+  Centroid longitude (calculated from geometry)
+</ParamField>
+
+<ParamField path="isActive" type="boolean" required>
+  Whether this Level 4 is active
+</ParamField>
+
+**Database Table:** `ForestPatrimonyLevel4`
+
+## Geometry Storage
+
+Geospatial data for Level 4 units is stored in the **`forest_geometry_n4`** PostGIS table.
+
+### Table Schema
+
+```sql
+CREATE TABLE public.forest_geometry_n4 (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL,
+  level2_id UUID NOT NULL,
+  level3_id UUID NOT NULL,
+  level4_id UUID NOT NULL,
+  geom GEOMETRY(MultiPolygon, 4326) NOT NULL,
+  superficie_ha NUMERIC(14,4) GENERATED ALWAYS AS (
+    ST_Area(geom::geography) / 10000
+  ) STORED,
+  centroid GEOMETRY(Point, 4326) GENERATED ALWAYS AS (
+    ST_Centroid(geom)
+  ) STORED,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  valid_from TIMESTAMP NOT NULL DEFAULT NOW(),
+  valid_to TIMESTAMP,
+  import_job_id UUID,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+```
+
+### Key Features
+
+- **Geometry Type**: `GEOMETRY(MultiPolygon, 4326)` - All polygons stored as MultiPolygon in WGS 84
+- **Computed Columns**: 
+  - `superficie_ha`: Automatically calculated from `ST_Area(geom::geography)`
+  - `centroid`: Automatically calculated from `ST_Centroid(geom)`
+- **Temporal Validity**: `valid_from` and `valid_to` track geometry history
+- **Active Flag**: `is_active` indicates current geometry version
+
+### Geometry Versioning
+
+When a new geometry is imported for an existing Level 4:
+
+<Steps>
+  <Step title="Deactivate Old Geometry">
+    Set `is_active = FALSE` and `valid_to = NOW()` on previous geometry:
+    
+    ```sql
+    UPDATE forest_geometry_n4
+    SET is_active = FALSE,
+        valid_to = NOW(),
+        updated_at = NOW()
+    WHERE organization_id = $1
+      AND level4_id = $2
+      AND is_active = TRUE;
+    ```
+  </Step>
+
+  <Step title="Insert New Geometry">
+    Insert new geometry with `is_active = TRUE` and `valid_from = NOW()`:
+    
+    ```sql
+    INSERT INTO forest_geometry_n4 (
+      organization_id,
+      level2_id,
+      level3_id,
+      level4_id,
+      geom,
+      import_job_id,
+      is_active,
+      valid_from
+    ) VALUES (
+      $1, $2, $3, $4,
+      ST_SetSRID(ST_Multi(ST_GeomFromGeoJSON($5)), 4326),
+      $6, TRUE, NOW()
+    );
+    ```
+  </Step>
+
+  <Step title="Update Level 4 Metrics">
+    Calculate and update `totalAreaHa`, `centroidLatitude`, `centroidLongitude`:
+    
+    ```sql
+    SELECT
+      superficie_ha::double precision,
+      ST_Y(centroid) AS lat,
+      ST_X(centroid) AS lon
+    FROM forest_geometry_n4
+    WHERE organization_id = $1
+      AND level4_id = $2
+      AND is_active = TRUE;
+    ```
+  </Step>
+</Steps>
+
+## Hierarchy Linking
+
+### Creating Hierarchy Records
+
+Before importing shapefiles, ensure the hierarchy exists:
+
+<Steps>
+  <Step title="Create Level 2">
+    ```typescript
+    await prisma.forestPatrimonyLevel2.create({
+      data: {
+        code: "N2-001",
+        name: "Finca Principal",
+        organizationId: "org-uuid",
+        isActive: true
+      }
+    });
+    ```
+  </Step>
+
+  <Step title="Create Level 3">
+    ```typescript
+    await prisma.forestPatrimonyLevel3.create({
+      data: {
+        code: "N3-001",
+        name: "Lote Norte",
+        level2Id: "level2-uuid",
+        isActive: true
+      }
+    });
+    ```
+  </Step>
+
+  <Step title="Create Level 4">
+    ```typescript
+    await prisma.forestPatrimonyLevel4.create({
+      data: {
+        code: "N4-001",
+        name: "Rodal A",
+        level3Id: "level3-uuid",
+        type: "RODAL",
+        fscCertificateStatus: "NO",
+        isActive: true
+      }
+    });
+    ```
+  </Step>
+
+  <Step title="Import Geometry">
+    Upload shapefile with matching codes (nivel2, nivel3, nivel4). The import worker automatically links to existing hierarchy records.
+  </Step>
+</Steps>
+
+### Hierarchy Validation
+
+During shapefile import, the worker validates hierarchy relationships:
+
+```typescript
+const level4 = await prisma.forestPatrimonyLevel4.findFirst({
+  where: {
+    code: level4Code,
+    level3: {
+      code: level3Code,
+      level2: {
+        code: level2Code,
+        organizationId: job.organizationId
+      }
+    }
+  },
+  include: {
+    level3: {
+      include: {
+        level2: true
+      }
+    }
+  }
+});
+
+if (!level4) {
+  throw new Error("No existe relación jerárquica válida");
+}
+```
+
+<Warning>
+  If the hierarchy (Level 2 → Level 3 → Level 4) doesn't exist in the database, the import will **fail** for that feature.
+</Warning>
+
+## Land Use Types
+
+Level 4 units reference land use types from the `LandUseType` table.
+
+<ParamField path="id" type="uuid" required>
+  Unique land use type identifier
+</ParamField>
+
+<ParamField path="code" type="string" required>
+  Land use code
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Land use name (e.g., "BOSQUE", "NO BOSQUE", "CONUCO")
+</ParamField>
+
+<ParamField path="category" type="string">
+  Optional category for grouping
+</ParamField>
+
+<ParamField path="surfaceHa" type="decimal">
+  Total surface area for this land use (sum of all Level 4 areas)
+</ParamField>
+
+<ParamField path="organizationId" type="uuid" required>
+  Parent organization
+</ParamField>
+
+<ParamField path="isActive" type="boolean" required>
+  Whether this land use type is active
+</ParamField>
+
+### Surface Area Synchronization
+
+After geometry imports, the system recalculates `LandUseType.surfaceHa` totals:
+
+```sql
+-- Reset all to 0
+UPDATE "LandUseType"
+SET "surfaceHa" = 0
+WHERE "organizationId" = $1::uuid;
+
+-- Recalculate from Level 4 totals
+WITH totals AS (
+  SELECT
+    LOWER(BTRIM(l4."currentLandUseName")) AS land_use_name,
+    SUM(COALESCE(l4."totalAreaHa", 0))::numeric(14,4) AS total_surface_ha
+  FROM "ForestPatrimonyLevel4" l4
+  INNER JOIN "ForestPatrimonyLevel3" l3 ON l3.id = l4."level3Id"
+  INNER JOIN "ForestPatrimonyLevel2" l2 ON l2.id = l3."level2Id"
+  WHERE l2."organizationId" = $1::uuid
+    AND l4."isActive" = TRUE
+    AND l4."currentLandUseName" IS NOT NULL
+    AND BTRIM(l4."currentLandUseName") <> ''
+  GROUP BY LOWER(BTRIM(l4."currentLandUseName"))
+)
+UPDATE "LandUseType" lut
+SET "surfaceHa" = totals.total_surface_ha
+FROM totals
+WHERE lut."organizationId" = $1::uuid
+  AND LOWER(BTRIM(lut."name")) = totals.land_use_name;
+```
+
+## Querying Hierarchy
+
+### Get All Geometries for a Finca
+
+```sql
+SELECT
+  g.id,
+  l2.code AS nivel2,
+  l3.code AS nivel3,
+  l4.code AS nivel4,
+  g.superficie_ha,
+  ST_AsGeoJSON(g.geom) AS geometry
+FROM forest_geometry_n4 g
+INNER JOIN "ForestPatrimonyLevel2" l2 ON l2.id = g.level2_id
+INNER JOIN "ForestPatrimonyLevel3" l3 ON l3.id = g.level3_id
+INNER JOIN "ForestPatrimonyLevel4" l4 ON l4.id = g.level4_id
+WHERE g.organization_id = $1
+  AND l2.code = $2
+  AND g.is_active = TRUE
+  AND l4."isActive" = TRUE;
+```
+
+### Get Level 4 with Hierarchy Context
+
+```typescript
+const level4 = await prisma.forestPatrimonyLevel4.findUnique({
+  where: { id: level4Id },
+  include: {
+    level3: {
+      include: {
+        level2: true
+      }
+    }
+  }
+});
+
+// Access hierarchy:
+const fincaCode = level4.level3.level2.code;
+const loteCode = level4.level3.code;
+const rodalCode = level4.code;
+```
+
+### Get All Level 4 with Geometry
+
+```sql
+SELECT
+  l4.id,
+  l4.code,
+  l4.name,
+  l4."totalAreaHa",
+  l4."currentLandUseName",
+  l3.code AS level3_code,
+  l2.code AS level2_code,
+  (
+    SELECT COUNT(*)
+    FROM forest_geometry_n4 g
+    WHERE g.level4_id = l4.id
+      AND g.is_active = TRUE
+  ) AS geometry_count
+FROM "ForestPatrimonyLevel4" l4
+INNER JOIN "ForestPatrimonyLevel3" l3 ON l3.id = l4."level3Id"
+INNER JOIN "ForestPatrimonyLevel2" l2 ON l2.id = l3."level2Id"
+WHERE l2."organizationId" = $1
+  AND l4."isActive" = TRUE
+ORDER BY l2.code, l3.code, l4.code;
+```
+
+## Data Integrity Rules
+
+### Cascade Behavior
+
+- **Deleting Level 2**: Should cascade to Level 3 and Level 4 (soft delete recommended)
+- **Deleting Level 3**: Should cascade to Level 4 (soft delete recommended)
+- **Deleting Level 4**: Should deactivate geometry records (`is_active = FALSE`)
+
+### Active Flags
+
+All hierarchy levels use `isActive` flags instead of hard deletes:
+
+```typescript
+// Soft delete Level 4
+await prisma.forestPatrimonyLevel4.update({
+  where: { id: level4Id },
+  data: { isActive: false }
+});
+
+// Also deactivate geometry
+await prisma.$executeRaw`
+  UPDATE forest_geometry_n4
+  SET is_active = FALSE,
+      valid_to = NOW()
+  WHERE level4_id = ${level4Id}::uuid
+    AND is_active = TRUE
+`;
+```
+
+### Unique Constraints
+
+- **Level 2**: Unique `(organizationId, code)`
+- **Level 3**: Unique `(level2Id, code)`
+- **Level 4**: Unique `(level3Id, code)`
+
+## Performance Indexes
+
+Recommended indexes for efficient queries:
+
+```sql
+-- Geometry spatial index
+CREATE INDEX idx_forest_geometry_n4_geom ON forest_geometry_n4 USING GIST (geom);
+
+-- Active geometry lookup
+CREATE INDEX idx_forest_geometry_n4_active ON forest_geometry_n4 (level4_id, is_active)
+  WHERE is_active = TRUE;
+
+-- Organization + active geometry
+CREATE INDEX idx_forest_geometry_n4_org_active ON forest_geometry_n4 (organization_id, is_active)
+  WHERE is_active = TRUE;
+
+-- Hierarchy navigation
+CREATE INDEX idx_forest_patrimony_level3_level2 ON "ForestPatrimonyLevel3" ("level2Id");
+CREATE INDEX idx_forest_patrimony_level4_level3 ON "ForestPatrimonyLevel4" ("level3Id");
+```
+
+## Related Documentation
+
+- [Shapefile Import](/geo/shapefile-import) - Importing geometry data
+- [Map Visualization](/geo/map-visualization) - Viewing hierarchy on map
+- [Workers](/geo/workers) - Background processing

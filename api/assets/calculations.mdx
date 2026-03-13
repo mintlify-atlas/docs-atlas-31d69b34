@@ -1,0 +1,519 @@
+---
+title: 'Asset Calculation Jobs'
+api: 'Multiple /api/assets/calculation-jobs'
+---
+
+# Asset Calculation Jobs API
+
+Trigger and manage automated calculation jobs that process measurement observations and generate statistical summaries and metrics.
+
+## Overview
+
+Calculation jobs run asynchronously to analyze campaign observations using protocol-specific formulas. They generate result snapshots with computed metrics, quality indicators, and decision support classifications.
+
+### Job Lifecycle
+
+1. **PENDING** - Job created, waiting to run
+2. **PROCESSING** - Job is currently executing
+3. **COMPLETED** - Job finished successfully
+4. **FAILED** - Job encountered an error
+
+### Worker Integration
+
+Jobs are processed by the asset measurement worker (`src/lib/asset-measurement-worker.ts`) which:
+- Fetches all observations for the campaign
+- Applies protocol-specific calculation formulas
+- Generates quality metrics and validation reports
+- Creates versioned result snapshots
+- Handles errors and retry logic
+
+---
+
+## List Calculation Jobs
+
+<api-endpoint method="GET" path="/api/assets/calculation-jobs">
+Retrieve a paginated list of calculation jobs.
+</api-endpoint>
+
+### Query Parameters
+
+<ParamField query="campaignId" type="uuid">
+  Filter by campaign ID
+</ParamField>
+
+<ParamField query="domain" type="enum">
+  Filter by domain: `BIOLOGICO`, `HIDROLOGICO`, `DENDROMETRICO`, `DEMOGRAFICO`
+</ParamField>
+
+<ParamField query="protocolType" type="enum">
+  Filter by protocol type
+</ParamField>
+
+<ParamField query="status" type="enum">
+  Filter by job status: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  Page number for pagination
+</ParamField>
+
+<ParamField query="limit" type="integer" default="25">
+  Number of records per page
+</ParamField>
+
+<ParamField query="sortBy" type="enum" default="createdAt">
+  Sort field: `createdAt`, `runAfter`, `updatedAt`
+</ParamField>
+
+<ParamField query="sortOrder" type="enum" default="desc">
+  Sort order: `asc`, `desc`
+</ParamField>
+
+### Response
+
+<ResponseField name="items" type="array">
+  Array of calculation job objects
+  
+  <ResponseField name="id" type="uuid">
+    Job unique identifier
+  </ResponseField>
+  
+  <ResponseField name="organizationId" type="uuid">
+    Organization ID
+  </ResponseField>
+  
+  <ResponseField name="campaignId" type="uuid">
+    Campaign ID
+  </ResponseField>
+  
+  <ResponseField name="campaign" type="object">
+    Campaign summary
+    
+    <ResponseField name="id" type="uuid">
+      Campaign ID
+    </ResponseField>
+    
+    <ResponseField name="campaignCode" type="string">
+      Campaign code
+    </ResponseField>
+    
+    <ResponseField name="campaignName" type="string">
+      Campaign name
+    </ResponseField>
+    
+    <ResponseField name="domain" type="enum">
+      Domain
+    </ResponseField>
+    
+    <ResponseField name="protocolType" type="enum">
+      Protocol type
+    </ResponseField>
+  </ResponseField>
+  
+  <ResponseField name="domain" type="enum">
+    Asset domain
+  </ResponseField>
+  
+  <ResponseField name="protocolType" type="enum">
+    Protocol type
+  </ResponseField>
+  
+  <ResponseField name="status" type="enum">
+    Job status: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`
+  </ResponseField>
+  
+  <ResponseField name="attempts" type="integer">
+    Number of execution attempts
+  </ResponseField>
+  
+  <ResponseField name="runAfter" type="datetime">
+    Scheduled execution time
+  </ResponseField>
+  
+  <ResponseField name="startedAt" type="datetime" optional>
+    Job start timestamp
+  </ResponseField>
+  
+  <ResponseField name="completedAt" type="datetime" optional>
+    Job completion timestamp
+  </ResponseField>
+  
+  <ResponseField name="errorMessage" type="string" optional>
+    Error message if job failed
+  </ResponseField>
+  
+  <ResponseField name="payload" type="object" optional>
+    Custom job parameters (JSON)
+  </ResponseField>
+  
+  <ResponseField name="createdAt" type="datetime">
+    Creation timestamp
+  </ResponseField>
+  
+  <ResponseField name="updatedAt" type="datetime">
+    Last update timestamp
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  <ResponseField name="total" type="integer">
+    Total number of records
+  </ResponseField>
+  
+  <ResponseField name="page" type="integer">
+    Current page number
+  </ResponseField>
+  
+  <ResponseField name="limit" type="integer">
+    Records per page
+  </ResponseField>
+  
+  <ResponseField name="totalPages" type="integer">
+    Total number of pages
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.example.com/api/assets/calculation-jobs?status=COMPLETED&page=1&limit=10" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "items": [
+    {
+      "id": "job-uuid",
+      "organizationId": "org-uuid",
+      "campaignId": "campaign-uuid",
+      "campaign": {
+        "id": "campaign-uuid",
+        "campaignCode": "SURV-2026-Q1",
+        "campaignName": "Survival Assessment Q1 2026",
+        "domain": "BIOLOGICO",
+        "protocolType": "BIO_SOBREVIVENCIA"
+      },
+      "domain": "BIOLOGICO",
+      "protocolType": "BIO_SOBREVIVENCIA",
+      "status": "COMPLETED",
+      "attempts": 1,
+      "runAfter": "2026-03-16T00:00:00.000Z",
+      "startedAt": "2026-03-16T01:05:00.000Z",
+      "completedAt": "2026-03-16T01:05:15.000Z",
+      "errorMessage": null,
+      "payload": null,
+      "createdAt": "2026-03-15T18:00:00.000Z",
+      "updatedAt": "2026-03-16T01:05:15.000Z"
+    }
+  ],
+  "pagination": {
+    "total": 1,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 1
+  }
+}
+```
+
+---
+
+## Create Calculation Job
+
+<api-endpoint method="POST" path="/api/assets/calculation-jobs">
+Enqueue a new calculation job for a campaign.
+</api-endpoint>
+
+### Request Body
+
+<ParamField body="campaignId" type="uuid" required>
+  Campaign ID to process
+</ParamField>
+
+<ParamField body="runAfter" type="datetime">
+  Schedule job to run after this time (defaults to now)
+</ParamField>
+
+<ParamField body="payload" type="object">
+  Custom job parameters (JSON object)
+</ParamField>
+
+### Response
+
+Returns the created job object with HTTP status `201 Created`. The job is automatically enqueued and will be processed by the worker.
+
+<Note>
+  The campaign must exist and belong to the user's organization. Domain and protocol type are inherited from the campaign.
+</Note>
+
+### Example Request
+
+```bash
+curl -X POST "https://api.example.com/api/assets/calculation-jobs" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "campaignId": "campaign-uuid",
+    "runAfter": "2026-03-16T00:00:00Z"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "id": "job-uuid",
+  "organizationId": "org-uuid",
+  "campaignId": "campaign-uuid",
+  "domain": "BIOLOGICO",
+  "protocolType": "BIO_SOBREVIVENCIA",
+  "status": "PENDING",
+  "attempts": 0,
+  "runAfter": "2026-03-16T00:00:00.000Z",
+  "startedAt": null,
+  "completedAt": null,
+  "errorMessage": null,
+  "payload": null,
+  "createdAt": "2026-03-15T18:00:00.000Z",
+  "updatedAt": "2026-03-15T18:00:00.000Z"
+}
+```
+
+---
+
+## Delete Calculation Job
+
+<api-endpoint method="DELETE" path="/api/assets/calculation-jobs">
+Delete a calculation job.
+</api-endpoint>
+
+### Request Body
+
+<ParamField body="id" type="uuid" required>
+  Job ID to delete
+</ParamField>
+
+<Note>
+  Jobs with status `PROCESSING` cannot be deleted. Returns HTTP 409 if the job is currently running.
+</Note>
+
+### Response
+
+Returns the deleted job ID.
+
+```json
+{
+  "id": "job-uuid"
+}
+```
+
+---
+
+## Calculation Worker Logic
+
+The asset measurement worker (`processAssetCalculationJob`) performs the following steps:
+
+### 1. Fetch Campaign Data
+
+Retrieves the campaign with all observations:
+```typescript
+const job = await prisma.assetCalculationJob.findUnique({
+  where: { id: jobId },
+  include: {
+    campaign: {
+      select: {
+        observations: {
+          select: {
+            sectionKey: true,
+            level5UnitCode: true,
+            observedAt: true,
+            payload: true,
+          },
+        },
+      },
+    },
+  },
+});
+```
+
+### 2. Calculate Summary
+
+Generates observation counts by section and Level 5 unit:
+```typescript
+{
+  observationCount: 45,
+  sectionCount: 3,
+  level5UnitCount: 12,
+  observationsBySection: { "L1": 15, "L2": 15, "L3": 15 },
+  observationsByLevel5Unit: { "P001": 4, "P002": 3, ... }
+}
+```
+
+### 3. Apply Protocol Formulas
+
+Runs specialized calculation functions based on protocol type:
+
+**BIO_SOBREVIVENCIA** calculates:
+- `SURVIVAL_REAL_PCT` - Actual survival percentage
+- `SURVIVAL_PRESC_PCT` - Prescribed survival percentage
+- `DENSITY_VIVA_HA` - Live density per hectare
+- `AVG_HEIGHT_RODAL` - Average stand height
+- `SAMPLING_ERROR_PCT` - Statistical sampling error
+- `SURVIVAL_SEMAFORO` - Status indicator (VERDE/AMARILLO/ROJO/GRIS)
+- Decision classifications for acceptance and next steps
+
+**HIDRO_ESTACION_HIDROLOGICA** calculates:
+- `MEAN_FLOW_M3S` - Mean flow rate
+- `MAX_FLOW_M3S` - Maximum flow
+- `MEAN_WATER_LEVEL_M` - Mean water level
+- `FLOW_VARIABILITY_PCT` - Flow variability
+- `HYDRO_ALERT_DAYS` - Number of alert days
+- `HYDRO_STATUS` - Risk classification
+
+**DENDRO_PARCELA_CARBONO** calculates:
+- `BIOMASS_T_HA` - Biomass per hectare
+- `CARBON_STOCK_T_HA` - Carbon stock (biomass × 0.47)
+- `CO2_EQ_T_HA` - CO2 equivalent (carbon × 44/12)
+- `CARBON_CLASS` - Capture classification
+
+### 4. Create Result Snapshot
+
+Stores results with versioning:
+```typescript
+await tx.assetResultSnapshot.create({
+  data: {
+    campaignId: job.campaignId,
+    level4Id: job.campaign.level4Id,
+    domain: job.campaign.domain,
+    resultKey: `${campaignCode}_AUTO_SUMMARY`,
+    resultVersion: nextVersion,
+    schemaVersion: "1.0",
+    resultPayload: {
+      summary,
+      metrics,
+      quality,
+      protocolType,
+      generatedBy: "asset-measurement-worker",
+      formulaVersion: "1.0.0",
+    },
+    isCurrent: true,
+    calculatedAt: new Date(),
+  },
+});
+```
+
+### 5. Quality Metrics
+
+All protocols include quality indicators:
+- `validObservationCount` - Observations passing validation
+- `invalidObservationCount` - Observations with errors
+- `totalObservationCount` - Total observations processed
+- Protocol-specific quality flags
+
+---
+
+## Result Snapshot Structure
+
+Calculation jobs create result snapshots in the `asset_result_snapshots` table:
+
+```json
+{
+  "id": "result-uuid",
+  "campaignId": "campaign-uuid",
+  "level4Id": "level4-uuid",
+  "domain": "BIOLOGICO",
+  "resultKey": "SURV-2026-Q1_AUTO_SUMMARY",
+  "resultVersion": 2,
+  "schemaVersion": "1.0",
+  "isCurrent": true,
+  "calculatedAt": "2026-03-16T01:05:15.000Z",
+  "resultPayload": {
+    "summary": {
+      "observationCount": 45,
+      "sectionCount": 3,
+      "level5UnitCount": 12
+    },
+    "metrics": {
+      "SURVIVAL_REAL_PCT": 95.2,
+      "SURVIVAL_PRESC_PCT": 93.8,
+      "DENSITY_VIVA_HA": 1058,
+      "AVG_HEIGHT_RODAL": 2.45,
+      "SAMPLING_ERROR_PCT": 4.2,
+      "SURVIVAL_SEMAFORO": "VERDE",
+      "SURVIVAL_ACCEPTANCE_STATUS": "ACEPTADO",
+      "BIOLOGICAL_ACCOUNTING_STATUS": "ACTIVO_BIOLOGICO_EN_FORMACION",
+      "NEXT_INVENTORY_PROTOCOL": "BIO_PREOPERATIVO_O_MANEJO",
+      "OPERATIONAL_ACTION": "CONTINUA_MONITOREO_HASTA_SIGUIENTE_INVENTARIO"
+    },
+    "quality": {
+      "validObservationCount": 45,
+      "invalidObservationCount": 0,
+      "totalObservationCount": 45,
+      "zeroLiveObservationCount": 0,
+      "missingHeightCount": 2,
+      "missingHeightPct": 4.44,
+      "avgHeightIsReferential": false,
+      "replantAction": "SIN_REPLANTE"
+    },
+    "protocolType": "BIO_SOBREVIVENCIA",
+    "generatedBy": "asset-measurement-worker",
+    "formulaVersion": "1.0.0"
+  }
+}
+```
+
+---
+
+## Worker Scheduler
+
+The worker scheduler (`src/workers/asset-measurement-worker-scheduler.ts`) runs periodically to process pending jobs:
+
+```typescript
+// Finds next pending job where runAfter <= now
+const nextJob = await prisma.assetCalculationJob.findFirst({
+  where: {
+    status: AssetCalculationStatus.PENDING,
+    runAfter: { lte: new Date() },
+  },
+  orderBy: { createdAt: 'asc' },
+});
+
+if (nextJob) {
+  await processAssetCalculationJob(nextJob.id);
+}
+```
+
+---
+
+## Permissions
+
+All calculation job endpoints require authentication and appropriate permissions:
+
+- **GET**: Requires `asset-measurement:READ` or any write permission
+- **POST**: Requires `asset-measurement:CREATE`
+- **DELETE**: Requires `asset-measurement:DELETE`
+
+Super admins bypass organization restrictions.
+
+## Audit Logging
+
+All create and delete operations are logged to the audit log with:
+- User ID
+- Action type (CREATE, DELETE)
+- Entity type: `AssetCalculationJob`
+- Entity ID
+- Changed values
+
+## Error Handling
+
+Jobs that fail during processing:
+- Set status to `FAILED`
+- Store error message in `errorMessage` field
+- Increment `attempts` counter
+- Do not automatically retry (manual intervention required)
+
+<Note>
+  For production deployments, consider implementing a retry mechanism with exponential backoff for transient failures.
+</Note>

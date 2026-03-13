@@ -1,0 +1,340 @@
+---
+title: "Organizations"
+description: "Multi-organization architecture with dynamic switching and data isolation"
+---
+
+## Overview
+
+SMyEG implements a **multi-tenant organization system** where users can belong to one or more organizations. The system provides complete data isolation between organizations and allows seamless switching between authorized organizations.
+
+## Organization Architecture
+
+The organization system uses a scoped access model:
+
+- **SUPER_ADMIN**: Access to all organizations
+- **ADMIN**: Access to specific organization(s)
+- **Regular Users**: Access through role assignments
+
+## Organization Authorization
+
+### Fetching Authorized Organizations
+
+The `getAuthorizedOrganizationsForUser` function returns organizations a user can access:
+
+```typescript src/lib/auth-organizations.ts
+export async function getAuthorizedOrganizationsForUser(
+  userId: string, 
+  fallbackOrganizationId?: string | null
+) {
+  const hasSuperAdminRole = await prisma.userRole.findFirst({
+    where: {
+      userId,
+      isActive: true,
+      role: {
+        isActive: true,
+        slug: "SUPER_ADMIN"
+      }
+    }
+  });
+
+  if (hasSuperAdminRole) {
+    // Return ALL active organizations
+    return await prisma.organization.findMany({
+      where: { isActive: true, deletedAt: null },
+      orderBy: { name: "asc" }
+    });
+  }
+
+  // Return organizations where user has role assignments
+  // ...
+}
+```
+
+### Super Admin Access
+
+Users with the `SUPER_ADMIN` role automatically have access to **all active organizations** in the system:
+
+<CodeGroup>
+```typescript Super Admin Check
+const hasSuperAdminRole = await prisma.userRole.findFirst({
+  where: {
+    userId,
+    isActive: true,
+    role: {
+      isActive: true,
+      slug: "SUPER_ADMIN"
+    }
+  },
+  select: { id: true }
+});
+```
+
+```typescript Fetch All Organizations
+if (hasSuperAdminRole) {
+  const organizations = await prisma.organization.findMany({
+    where: {
+      isActive: true,
+      deletedAt: null
+    },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true }
+  });
+  return organizations;
+}
+```
+</CodeGroup>
+
+### Scoped Admin Access
+
+Regular users and scoped admins access organizations through **role assignments**:
+
+```typescript src/lib/auth-organizations.ts
+const assignments = await prisma.userRole.findMany({
+  where: {
+    userId,
+    isActive: true,
+    role: {
+      isActive: true,
+      organizationId: { not: null },
+      organization: {
+        isActive: true,
+        deletedAt: null
+      }
+    }
+  },
+  select: {
+    role: {
+      select: {
+        organization: {
+          select: { id: true, name: true }
+        }
+      }
+    }
+  }
+});
+```
+
+<Info>
+  The system automatically deduplicates organizations if a user has multiple role assignments within the same organization.
+</Info>
+
+## Organization Cards with Metadata
+
+The `getAuthorizedOrganizationCards` function enriches organization data with logos and site titles:
+
+```typescript src/lib/auth-organizations.ts
+export async function getAuthorizedOrganizationCards(
+  userId: string,
+  fallbackOrganizationId?: string | null
+): Promise<AuthorizedOrganizationCard[]> {
+  const authorizedOrganizations = await getAuthorizedOrganizationsForUser(
+    userId, 
+    fallbackOrganizationId
+  );
+  
+  // Fetch logos
+  const organizations = await prisma.organization.findMany({
+    where: { id: { in: organizationIds } },
+    select: { id: true, name: true, logoUrl: true }
+  });
+  
+  // Fetch site titles from system configuration
+  const siteTitleConfigs = await prisma.systemConfiguration.findMany({
+    where: {
+      organizationId: { in: organizationIds },
+      category: "general",
+      key: { in: ["site_title", "site_name"] }
+    }
+  });
+  
+  // Merge data...
+}
+```
+
+### Organization Card Type
+
+```typescript
+type AuthorizedOrganizationCard = {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  siteTitle: string | null;
+};
+```
+
+## Organization Context in Authentication
+
+During login, the user must select an organization. The system validates that the user has access to the selected organization:
+
+```typescript src/lib/auth.ts
+const roleInfo = await getUserRolesAndPermissions(user.id);
+const authorizedOrganizations = await getAuthorizedOrganizationsForUser(
+  user.id, 
+  user.organizationId
+);
+
+const selectedOrganization = authorizedOrganizations.find(
+  (org) => org.id === organizationId
+);
+
+if (!selectedOrganization) {
+  return null; // Unauthorized organization
+}
+
+return {
+  id: user.id,
+  email: user.email,
+  name: user.displayName,
+  roles: roleInfo.roles,
+  permissions: roleInfo.permissions,
+  organizationId: selectedOrganization.id,
+  organizationName: selectedOrganization.name
+};
+```
+
+<Warning>
+  If a user attempts to authenticate with an organization they don't have access to, the login will fail silently.
+</Warning>
+
+## Organization Switching
+
+Users can switch between authorized organizations by re-authenticating with a different `organizationId`:
+
+<Steps>
+  <Step title="Fetch Authorized Organizations">
+    Call `getAuthorizedOrganizationsForUser` to get the list of available organizations.
+  </Step>
+  
+  <Step title="Display Organization Selector">
+    Show organization cards with logos and names.
+  </Step>
+  
+  <Step title="Re-authenticate">
+    Call `signIn` with the new `organizationId` to switch context.
+  </Step>
+  
+  <Step title="Session Update">
+    The JWT token is updated with the new organization context.
+  </Step>
+</Steps>
+
+## Organization Management
+
+The organization management page (`/organizaciones`) uses server-side filtering based on roles:
+
+```typescript src/app/(dashboard)/organizaciones/page.tsx
+function isSuperAdmin(roles: string[]) {
+  return roles.includes("SUPER_ADMIN");
+}
+
+function isScopedAdmin(roles: string[]) {
+  return roles.includes("ADMIN") && !isSuperAdmin(roles);
+}
+
+async function getOrganizations(roles: string[], organizationId?: string | null) {
+  const organizations = await prisma.organization.findMany({
+    where: {
+      deletedAt: null,
+      ...(isScopedAdmin(roles) ? { id: organizationId ?? "" } : {})
+    },
+    include: { country: true },
+    orderBy: { createdAt: "desc" }
+  });
+
+  return organizations;
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Super Admins" icon="crown">
+    See and manage **all organizations** in the system.
+  </Card>
+  
+  <Card title="Scoped Admins" icon="building">
+    Only see and manage **their own organization**.
+  </Card>
+</CardGroup>
+
+## Data Isolation
+
+All queries should include the organization context to ensure proper data isolation:
+
+```typescript
+const session = await auth();
+const organizationId = session?.user?.organizationId;
+
+const data = await prisma.model.findMany({
+  where: {
+    organizationId: organizationId,
+    // other filters...
+  }
+});
+```
+
+### Permission-Based Access
+
+Combine organization isolation with permission checks:
+
+```typescript src/app/(dashboard)/organizaciones/page.tsx
+const session = await auth();
+if (!session?.user?.id) {
+  redirect("/login");
+}
+
+const livePermissionInfo = await getUserRolesAndPermissions(session.user.id);
+const ability = buildAbilityFromPermissions(livePermissionInfo?.permissions ?? []);
+
+if (!ability.can("read", "organizations")) {
+  redirect("/unauthorized");
+}
+
+const organizations = await getOrganizations(
+  session.user.roles ?? [], 
+  session.user.organizationId ?? null
+);
+```
+
+## Fallback Organization
+
+The system supports a fallback organization for edge cases:
+
+```typescript src/lib/auth-organizations.ts
+if (fallbackOrganizationId) {
+  const fallbackOrganization = await prisma.organization.findFirst({
+    where: {
+      id: fallbackOrganizationId,
+      isActive: true,
+      deletedAt: null
+    },
+    select: { id: true, name: true }
+  });
+
+  if (fallbackOrganization) {
+    organizations.push(fallbackOrganization);
+  }
+}
+```
+
+<Tip>
+  Use the fallback organization parameter when a user's primary organization might not be accessible through role assignments.
+</Tip>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Validate Organization Access">
+    Before allowing any action, verify that the user has access to the target organization through `getAuthorizedOrganizationsForUser`.
+  </Accordion>
+  
+  <Accordion title="Filter by Organization ID">
+    All database queries should include `organizationId` in the `where` clause unless the user is a SUPER_ADMIN.
+  </Accordion>
+  
+  <Accordion title="Store Organization in Session">
+    The current organization context is stored in the JWT token and accessible via `session.user.organizationId`.
+  </Accordion>
+  
+  <Accordion title="Handle Organization Switching">
+    Implement a UI for users to switch between authorized organizations by re-authenticating with a different organization ID.
+  </Accordion>
+</AccordionGroup>
